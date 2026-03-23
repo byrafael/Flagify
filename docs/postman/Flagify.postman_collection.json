@@ -1,19 +1,20 @@
 {
   "info": {
-    "_postman_id": "7d0c1bb4-3b2b-48c9-bf40-flagify-collection",
+    "_postman_id": "7d0c1bb4-3b2b-48c9-bf40-flagify-collection-v2",
     "name": "Flagify API",
-    "description": "Postman collection for the Flagify admin and runtime API.",
+    "description": "Postman collection for the Flagify admin, runtime, and snapshot API.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
       "key": "base_url",
-      "value": "https://flagify.rsrdev.com"
+      "value": "http://127.0.0.1:8080"
     }
   ],
   "item": [
     {
       "name": "Projects",
+      "description": "Project bootstrap and top-level tenancy. Creating a project also creates the default environments: development, staging, and production.",
       "item": [
         {
           "name": "Create Project",
@@ -24,7 +25,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "if (pm.response.code === 201) {",
-                  "  var data = pm.response.json();",
+                  "  const data = pm.response.json();",
                   "  pm.environment.set('project_id', data.id);",
                   "  pm.environment.set('project_slug', data.slug);",
                   "}"
@@ -33,17 +34,11 @@
             }
           ],
           "request": {
+            "description": "Create a new project. This is the root container for environments, clients, segments, flags, and keys.",
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{root_key}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{root_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
               "mode": "raw",
@@ -51,130 +46,26 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/projects",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects"
-              ]
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects"]
             }
           }
         },
         {
           "name": "List Projects",
           "request": {
+            "description": "List visible projects. Root can see all projects; scoped keys only see their bound project.",
             "method": "GET",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{root_key}}",
-                "type": "text"
-              }
+              { "key": "Authorization", "value": "Bearer {{root_key}}", "type": "text" }
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/projects?limit=50&offset=0",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects"
-              ],
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects"],
               "query": [
-                {
-                  "key": "limit",
-                  "value": "50"
-                },
-                {
-                  "key": "offset",
-                  "value": "0"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Project",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{root_key}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects",
-                "{{project_id}}"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Update Project",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{root_key}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Example Updated\",\n  \"description\": \"Updated project description\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects",
-                "{{project_id}}"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Delete Project",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{root_key}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects",
-                "{{project_id}}"
+                { "key": "limit", "value": "50" },
+                { "key": "offset", "value": "0" }
               ]
             }
           }
@@ -183,6 +74,7 @@
     },
     {
       "name": "Keys",
+      "description": "API keys control access. Project admin keys manage project resources, project read keys inspect them, and client runtime keys resolve runtime config for one client.",
       "item": [
         {
           "name": "Create Project Admin Key",
@@ -193,7 +85,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "if (pm.response.code === 201) {",
-                  "  var data = pm.response.json();",
+                  "  const data = pm.response.json();",
                   "  pm.environment.set('project_admin_key_id', data.id);",
                   "  pm.environment.set('project_admin_key', data.secret);",
                   "}"
@@ -202,17 +94,11 @@
             }
           ],
           "request": {
+            "description": "Create a project admin key for managing flags, environments, segments, clients, overrides, and additional keys inside the project.",
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{root_key}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{root_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
               "mode": "raw",
@@ -220,14 +106,8 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/keys",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "keys"
-              ]
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "keys"]
             }
           }
         },
@@ -240,7 +120,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "if (pm.response.code === 201) {",
-                  "  var data = pm.response.json();",
+                  "  const data = pm.response.json();",
                   "  pm.environment.set('project_read_key_id', data.id);",
                   "  pm.environment.set('project_read_key', data.secret);",
                   "}"
@@ -249,17 +129,11 @@
             }
           ],
           "request": {
+            "description": "Create a read-only project key. Use this for inspection flows such as listing resources, reading runtime config for any client, and downloading snapshots.",
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{root_key}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
               "mode": "raw",
@@ -267,14 +141,8 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/keys",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "keys"
-              ]
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "keys"]
             }
           }
         },
@@ -287,7 +155,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "if (pm.response.code === 201) {",
-                  "  var data = pm.response.json();",
+                  "  const data = pm.response.json();",
                   "  pm.environment.set('client_runtime_key_id', data.id);",
                   "  pm.environment.set('client_runtime_key', data.secret);",
                   "}"
@@ -296,17 +164,11 @@
             }
           ],
           "request": {
+            "description": "Create a runtime key bound to a single client. This key resolves runtime config without exposing broader project access.",
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_admin_key}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
               "mode": "raw",
@@ -314,381 +176,120 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/keys",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "keys"
-              ]
-            }
-          }
-        },
-        {
-          "name": "List Keys",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_admin_key}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/v1/keys?project_id={{project_id}}&limit=50&offset=0",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "keys"
-              ],
-              "query": [
-                {
-                  "key": "project_id",
-                  "value": "{{project_id}}"
-                },
-                {
-                  "key": "limit",
-                  "value": "50"
-                },
-                {
-                  "key": "offset",
-                  "value": "0"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Key",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_admin_key}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/v1/keys/{{project_admin_key_id}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "keys",
-                "{{project_admin_key_id}}"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Revoke Key",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_admin_key}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/v1/keys/{{project_read_key_id}}/revoke",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "keys",
-                "{{project_read_key_id}}",
-                "revoke"
-              ]
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "keys"]
             }
           }
         }
       ]
     },
     {
-      "name": "Flags",
+      "name": "Environments",
+      "description": "Environments let the same flag behave differently across release contexts such as development, staging, production, or a custom QA environment.",
       "item": [
         {
-          "name": "Create Boolean Flag",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "if (pm.response.code === 201) {",
-                  "  var data = pm.response.json();",
-                  "  pm.environment.set('boolean_flag_id', data.id);",
-                  "}"
-                ]
-              }
-            }
-          ],
+          "name": "List Environments",
           "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_admin_key}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"key\": \"experimental_teams\",\n  \"name\": \"Experimental Teams\",\n  \"type\": \"boolean\",\n  \"default_value\": false\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/flags",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects",
-                "{{project_id}}",
-                "flags"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Create Select Flag",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "if (pm.response.code === 201) {",
-                  "  var data = pm.response.json();",
-                  "  pm.environment.set('select_flag_id', data.id);",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_admin_key}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"key\": \"theme\",\n  \"name\": \"Theme\",\n  \"type\": \"select\",\n  \"default_value\": \"dark\",\n  \"options\": [\"dark\", \"light\"]\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/flags",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects",
-                "{{project_id}}",
-                "flags"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Create Multi Select Flag",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "if (pm.response.code === 201) {",
-                  "  var data = pm.response.json();",
-                  "  pm.environment.set('multi_flag_id', data.id);",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_admin_key}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"key\": \"allowed_regions\",\n  \"name\": \"Allowed Regions\",\n  \"type\": \"multi_select\",\n  \"default_value\": [\"us\", \"ca\"],\n  \"options\": [\"us\", \"ca\", \"uk\"]\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/flags",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects",
-                "{{project_id}}",
-                "flags"
-              ]
-            }
-          }
-        },
-        {
-          "name": "List Flags",
-          "request": {
+            "description": "List the environments in the project. New projects start with development, staging, and production automatically.",
             "method": "GET",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_read_key}}",
-                "type": "text"
-              }
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
             ],
             "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/flags?limit=50&offset=0&include_archived=false",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects",
-                "{{project_id}}",
-                "flags"
-              ],
-              "query": [
-                {
-                  "key": "limit",
-                  "value": "50"
-                },
-                {
-                  "key": "offset",
-                  "value": "0"
-                },
-                {
-                  "key": "include_archived",
-                  "value": "false"
-                }
-              ]
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/environments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "environments"]
             }
           }
         },
         {
-          "name": "Get Flag",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_read_key}}",
-                "type": "text"
+          "name": "Create QA Environment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set('environment_id', data.id);",
+                  "  pm.environment.set('environment_key', data.key);",
+                  "}"
+                ]
               }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/flags/{{select_flag_id}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects",
-                "{{project_id}}",
-                "flags",
-                "{{select_flag_id}}"
-              ]
             }
-          }
-        },
-        {
-          "name": "Update Flag",
+          ],
           "request": {
-            "method": "PATCH",
+            "description": "Create an additional environment. Environments are where environment-specific flag rules and defaults live.",
+            "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_admin_key}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Theme Updated\",\n  \"options\": [\"dark\", \"light\", \"system\"],\n  \"default_value\": \"dark\"\n}"
+              "raw": "{\n  \"key\": \"qa\",\n  \"name\": \"QA\",\n  \"description\": \"Quality assurance environment\",\n  \"sort_order\": 25\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/flags/{{select_flag_id}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects",
-                "{{project_id}}",
-                "flags",
-                "{{select_flag_id}}"
-              ]
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/environments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "environments"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Segments",
+      "description": "Segments are reusable audiences defined by client attributes. A segment can be referenced by many flag rules to avoid duplicating targeting logic.",
+      "item": [
+        {
+          "name": "Create Premium Segment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set('segment_id', data.id);",
+                  "  pm.environment.set('segment_key', data.key);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "description": "Create a reusable audience for premium customers. This example matches clients whose metadata.plan is premium.",
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"key\": \"premium_users\",\n  \"name\": \"Premium Users\",\n  \"rules\": [\n    {\n      \"attribute\": \"metadata.plan\",\n      \"operator\": \"equals\",\n      \"value\": \"premium\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/segments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "segments"]
             }
           }
         },
         {
-          "name": "Delete Flag",
+          "name": "List Segments",
           "request": {
-            "method": "DELETE",
+            "description": "List all active segments available for use in environment-specific flag rules.",
+            "method": "GET",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_admin_key}}",
-                "type": "text"
-              }
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
             ],
             "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/flags/{{boolean_flag_id}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects",
-                "{{project_id}}",
-                "flags",
-                "{{boolean_flag_id}}"
-              ]
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/segments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "segments"]
             }
           }
         }
@@ -696,6 +297,7 @@
     },
     {
       "name": "Clients",
+      "description": "Clients are the runtime subjects being evaluated. Their metadata is what rule conditions and segments target.",
       "item": [
         {
           "name": "Create Client",
@@ -706,7 +308,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "if (pm.response.code === 201) {",
-                  "  var data = pm.response.json();",
+                  "  const data = pm.response.json();",
                   "  pm.environment.set('client_id', data.id);",
                   "  pm.environment.set('client_key', data.key);",
                   "}"
@@ -715,260 +317,96 @@
             }
           ],
           "request": {
+            "description": "Create a client with metadata that can be used for targeting, segment membership, and sticky rollout bucketing.",
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_admin_key}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"key\": \"acme-inc\",\n  \"name\": \"Acme Inc.\",\n  \"description\": \"Enterprise customer account\",\n  \"metadata\": {\n    \"segment\": \"enterprise\",\n    \"region\": \"global\"\n  }\n}"
+              "raw": "{\n  \"key\": \"acme-inc\",\n  \"name\": \"Acme Inc\",\n  \"metadata\": {\n    \"plan\": \"premium\",\n    \"country\": \"US\",\n    \"app_version\": \"2.4.0\"\n  }\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/projects/{{project_id}}/clients",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects",
-                "{{project_id}}",
-                "clients"
-              ]
-            }
-          }
-        },
-        {
-          "name": "List Clients",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_read_key}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/clients?limit=50&offset=0",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects",
-                "{{project_id}}",
-                "clients"
-              ],
-              "query": [
-                {
-                  "key": "limit",
-                  "value": "50"
-                },
-                {
-                  "key": "offset",
-                  "value": "0"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Client",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_read_key}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/clients/{{client_id}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects",
-                "{{project_id}}",
-                "clients",
-                "{{client_id}}"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Update Client",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_admin_key}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Acme Inc.\",\n  \"metadata\": {\n    \"segment\": \"enterprise\",\n    \"region\": \"global\",\n    \"plan\": \"premium\"\n  }\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/clients/{{client_id}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects",
-                "{{project_id}}",
-                "clients",
-                "{{client_id}}"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Delete Client",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_admin_key}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/clients/{{client_id}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects",
-                "{{project_id}}",
-                "clients",
-                "{{client_id}}"
-              ]
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "clients"]
             }
           }
         }
       ]
     },
     {
-      "name": "Overrides",
+      "name": "Flags",
+      "description": "Flags define the feature itself. Environment-specific config adds ordered rules, rollout percentage, schedules, and served variants or values.",
       "item": [
         {
-          "name": "Put Override",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_admin_key}}",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+          "name": "Create Experiment Flag",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set('flag_id', data.id);",
+                  "  pm.environment.set('flag_key', data.key);",
+                  "}"
+                ]
               }
+            }
+          ],
+          "request": {
+            "description": "Create a multivariate flag with named variants and payloads. This example models an experiment-style rollout between control and variant_a.",
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"value\": true\n}"
+              "raw": "{\n  \"key\": \"new_dashboard\",\n  \"name\": \"New Dashboard\",\n  \"description\": \"Roll out the redesigned dashboard\",\n  \"flag_kind\": \"experiment\",\n  \"type\": \"select\",\n  \"default_value\": \"control\",\n  \"options\": [\"control\", \"variant_a\"],\n  \"variants\": [\n    {\n      \"key\": \"control\",\n      \"name\": \"Control\",\n      \"value\": \"control\",\n      \"payload\": { \"theme\": \"legacy\" }\n    },\n    {\n      \"key\": \"variant_a\",\n      \"name\": \"Variant A\",\n      \"value\": \"variant_a\",\n      \"payload\": { \"theme\": \"modern\" }\n    }\n  ],\n  \"default_variant_key\": \"control\"\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/clients/{{client_id}}/flags/{{select_flag_id}}/override",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects",
-                "{{project_id}}",
-                "clients",
-                "{{client_id}}",
-                "flags",
-                "{{select_flag_id}}",
-                "override"
-              ]
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/flags",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "flags"]
             }
           }
         },
         {
-          "name": "List Overrides",
+          "name": "Configure Production Rules",
           "request": {
+            "description": "Set production-specific rules for the flag. This example serves variant_a to 50% of the premium_users segment using sticky bucketing on client key.",
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"default_variant_key\": \"control\",\n  \"rules\": [\n    {\n      \"name\": \"Premium rollout\",\n      \"segment_keys\": [\"{{segment_key}}\"],\n      \"conditions\": [],\n      \"percentage\": 50,\n      \"bucketing_key\": \"key\",\n      \"serve\": {\n        \"variant_key\": \"variant_a\"\n      }\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/flags/{{flag_id}}/environments/production",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "flags", "{{flag_id}}", "environments", "production"]
+            }
+          }
+        },
+        {
+          "name": "List Flags",
+          "request": {
+            "description": "List project flags and inspect their top-level definition, including kind, variants, prerequisites, and stale status.",
             "method": "GET",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_read_key}}",
-                "type": "text"
-              }
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
             ],
             "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/clients/{{client_id}}/overrides",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects",
-                "{{project_id}}",
-                "clients",
-                "{{client_id}}",
-                "overrides"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Delete Override",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_admin_key}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/clients/{{client_id}}/flags/{{select_flag_id}}/override",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "projects",
-                "{{project_id}}",
-                "clients",
-                "{{client_id}}",
-                "flags",
-                "{{select_flag_id}}",
-                "override"
-              ]
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/flags",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "flags"]
             }
           }
         }
@@ -976,113 +414,78 @@
     },
     {
       "name": "Runtime",
+      "description": "Runtime endpoints evaluate flags for a client in a chosen environment. They also expose a snapshot format for local or offline evaluation consumers.",
       "item": [
         {
-          "name": "Current Client Config",
+          "name": "Resolve Runtime Config",
           "request": {
+            "description": "Resolve config for the client bound to the runtime key. The environment query parameter selects which environment rules to apply.",
             "method": "GET",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{client_runtime_key}}",
-                "type": "text"
-              }
+              { "key": "Authorization", "value": "Bearer {{client_runtime_key}}", "type": "text" }
             ],
             "url": {
-              "raw": "{{base_url}}/api/v1/runtime/config",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "runtime",
-                "config"
+              "raw": "{{base_url}}/api/v1/runtime/config?environment=production",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "runtime", "config"],
+              "query": [
+                { "key": "environment", "value": "production" }
               ]
             }
           }
         },
         {
-          "name": "Current Client Single Flag",
+          "name": "Resolve Project Client Config",
           "request": {
+            "description": "Resolve config for any client in a specific environment using a project read or admin key. Useful for debugging targeting decisions.",
             "method": "GET",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{client_runtime_key}}",
-                "type": "text"
-              }
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" }
             ],
             "url": {
-              "raw": "{{base_url}}/api/v1/runtime/config/experimental_teams",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "runtime",
-                "config",
-                "experimental_teams"
-              ]
+              "raw": "{{base_url}}/api/v1/runtime/projects/{{project_id}}/environments/production/clients/{{client_key}}/config",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "runtime", "projects", "{{project_id}}", "environments", "production", "clients", "{{client_key}}", "config"]
             }
           }
         },
         {
-          "name": "Project Client Config",
+          "name": "Fetch Runtime Snapshot",
           "request": {
+            "description": "Download an environment snapshot containing flag definitions, segments, and rules. This is the contract intended for local evaluation consumers or future SDKs.",
             "method": "GET",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_read_key}}",
-                "type": "text"
-              }
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" }
             ],
             "url": {
-              "raw": "{{base_url}}/api/v1/runtime/projects/{{project_id}}/clients/{{client_key}}/config",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "runtime",
-                "projects",
-                "{{project_id}}",
-                "clients",
-                "{{client_key}}",
-                "config"
-              ]
+              "raw": "{{base_url}}/api/v1/runtime/projects/{{project_id}}/environments/production/snapshot",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "runtime", "projects", "{{project_id}}", "environments", "production", "snapshot"]
             }
           }
-        },
+        }
+      ]
+    },
+    {
+      "name": "Events",
+      "description": "Evaluation events are the raw exposure trail. They show what value was served, why it was served, which rule matched, and the evaluation context.",
+      "item": [
         {
-          "name": "Project Client Single Flag",
+          "name": "List Evaluation Events",
           "request": {
+            "description": "List stored evaluation events for debugging and analysis. Filter by environment, flag, or client as needed.",
             "method": "GET",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{project_read_key}}",
-                "type": "text"
-              }
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" }
             ],
             "url": {
-              "raw": "{{base_url}}/api/v1/runtime/projects/{{project_id}}/clients/{{client_key}}/config/experimental_teams",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "runtime",
-                "projects",
-                "{{project_id}}",
-                "clients",
-                "{{client_key}}",
-                "config",
-                "experimental_teams"
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/evaluation-events?environment=production&limit=50&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "evaluation-events"],
+              "query": [
+                { "key": "environment", "value": "production" },
+                { "key": "limit", "value": "50" },
+                { "key": "offset", "value": "0" }
               ]
             }
           }

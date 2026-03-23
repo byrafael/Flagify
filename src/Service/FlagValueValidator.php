@@ -29,6 +29,86 @@ final class FlagValueValidator
         $this->validateValue($type, $defaultValue, $normalizedOptions, 'default_value');
     }
 
+    public function validateVariants(string $type, mixed $options, mixed $variants, ?string $defaultVariantKey): ?array
+    {
+        if ($variants === null) {
+            if ($defaultVariantKey !== null) {
+                throw new ApiError('validation_failed', 'default_variant_key requires variants', 422);
+            }
+
+            return null;
+        }
+
+        if (!is_array($variants) || $variants === []) {
+            throw new ApiError('validation_failed', 'variants must be a non-empty array', 422);
+        }
+
+        $allowed = $this->validateOptions($type, $options);
+        $normalized = [];
+        $keys = [];
+        foreach ($variants as $index => $variant) {
+            if (!is_array($variant)) {
+                throw new ApiError('validation_failed', sprintf('variant %d must be an object', $index), 422);
+            }
+            $key = $variant['key'] ?? null;
+            if (!is_string($key) || trim($key) === '') {
+                throw new ApiError('validation_failed', sprintf('variant %d key is required', $index), 422);
+            }
+            if (in_array($key, $keys, true)) {
+                throw new ApiError('validation_failed', 'variant keys must be unique', 422);
+            }
+            $value = $variant['value'] ?? null;
+            $this->validateValue($type, $value, $allowed, sprintf('variants[%d].value', $index));
+            $payload = $variant['payload'] ?? null;
+            if ($payload !== null && !is_array($payload)) {
+                throw new ApiError('validation_failed', sprintf('variants[%d].payload must be a JSON object', $index), 422);
+            }
+
+            $normalized[] = [
+                'key' => trim($key),
+                'name' => isset($variant['name']) && is_string($variant['name']) && trim($variant['name']) !== '' ? trim($variant['name']) : trim($key),
+                'value' => $value,
+                'payload' => $payload,
+            ];
+            $keys[] = trim($key);
+        }
+
+        if ($defaultVariantKey !== null && !in_array($defaultVariantKey, $keys, true)) {
+            throw new ApiError('validation_failed', 'default_variant_key must match an existing variant key', 422);
+        }
+
+        return $normalized;
+    }
+
+    public function validatePrerequisites(mixed $value): ?array
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (!is_array($value)) {
+            throw new ApiError('validation_failed', 'prerequisites must be an array', 422);
+        }
+
+        $normalized = [];
+        foreach ($value as $index => $prerequisite) {
+            if (!is_array($prerequisite)) {
+                throw new ApiError('validation_failed', sprintf('prerequisites[%d] must be an object', $index), 422);
+            }
+            $flagKey = $prerequisite['flag_key'] ?? null;
+            if (!is_string($flagKey) || trim($flagKey) === '') {
+                throw new ApiError('validation_failed', sprintf('prerequisites[%d].flag_key is required', $index), 422);
+            }
+
+            $normalized[] = array_filter([
+                'flag_key' => trim($flagKey),
+                'expected_variant_key' => isset($prerequisite['expected_variant_key']) && is_string($prerequisite['expected_variant_key']) ? trim($prerequisite['expected_variant_key']) : null,
+                'expected_value' => $prerequisite['expected_value'] ?? null,
+            ], static fn (mixed $entry): bool => $entry !== null);
+        }
+
+        return $normalized;
+    }
+
     public function validateValue(string $type, mixed $value, mixed $options, string $field = 'value'): void
     {
         if ($type === FlagType::BOOLEAN) {

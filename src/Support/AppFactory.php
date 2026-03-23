@@ -10,9 +10,14 @@ use Flagify\Auth\ScopeAuthorizer;
 use Flagify\Http\NativeApplication;
 use Flagify\Repository\ApiKeyRepository;
 use Flagify\Repository\ClientRepository;
+use Flagify\Repository\EnvironmentRepository;
+use Flagify\Repository\EvaluationEventRepository;
+use Flagify\Repository\FlagEnvironmentRepository;
 use Flagify\Repository\FlagRepository;
 use Flagify\Repository\OverrideRepository;
 use Flagify\Repository\ProjectRepository;
+use Flagify\Repository\SegmentRepository;
+use Flagify\Service\FlagEvaluationService;
 use Flagify\Service\FlagValueValidator;
 use Flagify\Service\ResolvedConfigService;
 use PDO;
@@ -43,13 +48,18 @@ final class AppFactory
         $projects = new ProjectRepository($pdo, $clock);
         $flags = new FlagRepository($pdo, $clock);
         $clients = new ClientRepository($pdo, $clock);
+        $environments = new EnvironmentRepository($pdo, $clock);
+        $segments = new SegmentRepository($pdo, $clock);
+        $flagEnvironments = new FlagEnvironmentRepository($pdo, $clock);
         $overrides = new OverrideRepository($pdo, $clock);
+        $events = new EvaluationEventRepository($pdo, $clock);
         $keys = new ApiKeyRepository($pdo, $clock);
         $authorizer = new ScopeAuthorizer();
         $generator = new ApiKeyGenerator();
         $authenticator = new ApiKeyAuthenticator($keys, $projects, $clients, $clock, $config['bootstrap_key']);
         $validator = new FlagValueValidator();
-        $resolvedConfig = new ResolvedConfigService($flags, $overrides, $clock);
+        $evaluation = new FlagEvaluationService($flags, $flagEnvironments, $segments, $overrides, $clock);
+        $resolvedConfig = new ResolvedConfigService($flags, $environments, $segments, $flagEnvironments, $overrides, $events, $evaluation, $clock);
 
         return new NativeApplication(
             $authenticator,
@@ -58,7 +68,11 @@ final class AppFactory
             $projects,
             $flags,
             $clients,
+            $environments,
+            $segments,
+            $flagEnvironments,
             $overrides,
+            $events,
             $keys,
             $validator,
             $resolvedConfig

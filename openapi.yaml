@@ -1,27 +1,31 @@
 openapi: 3.1.0
 info:
   title: Flagify API
-  version: 1.0.0
-  summary: Project-scoped feature flags with customer-specific overrides
+  version: 2.0.0
+  summary: Environment-aware feature flags, targeting rules, segments, variants, and runtime snapshots
   description: |
     Flagify manages:
     - projects
-    - customer clients inside projects
-    - flags inside projects
-    - per-client flag overrides
+    - environments inside projects
+    - clients inside projects
+    - flags with variants, prerequisites, and lifecycle metadata
+    - reusable targeting segments
+    - per-environment flag rules
+    - per-client overrides
     - API keys
-    - runtime config resolution
-
-    In this API, a `client` is a customer account inside a project, for example `acme-inc`.
+    - runtime resolution and local-evaluation snapshots
 servers:
   - url: https://flagify.rsrdev.com
 security:
   - bearerAuth: []
 tags:
   - name: Projects
+  - name: Environments
+  - name: Segments
   - name: Flags
   - name: Clients
   - name: Overrides
+  - name: Events
   - name: Keys
   - name: Runtime
 paths:
@@ -40,12 +44,7 @@ paths:
           description: Project created
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Project'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '409': { $ref: '#/components/responses/Error409' }
-        '422': { $ref: '#/components/responses/Error422' }
+              schema: { $ref: '#/components/schemas/Project' }
     get:
       tags: [Projects]
       summary: List projects
@@ -57,10 +56,7 @@ paths:
           description: Project list
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ProjectListResponse'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
+              schema: { $ref: '#/components/schemas/ProjectListResponse' }
   /api/v1/projects/{projectId}:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -72,12 +68,7 @@ paths:
           description: Project
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Project'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '404': { $ref: '#/components/responses/Error404' }
-        '410': { $ref: '#/components/responses/Error410' }
+              schema: { $ref: '#/components/schemas/Project' }
     patch:
       tags: [Projects]
       summary: Update project
@@ -85,30 +76,140 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateProjectRequest'
+            schema: { $ref: '#/components/schemas/UpdateProjectRequest' }
       responses:
         '200':
           description: Updated project
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Project'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '404': { $ref: '#/components/responses/Error404' }
-        '410': { $ref: '#/components/responses/Error410' }
-        '409': { $ref: '#/components/responses/Error409' }
-        '422': { $ref: '#/components/responses/Error422' }
+              schema: { $ref: '#/components/schemas/Project' }
     delete:
       tags: [Projects]
       summary: Soft delete project
       responses:
-        '204':
-          description: Project deleted
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '404': { $ref: '#/components/responses/Error404' }
+        '204': { description: Project deleted }
+  /api/v1/projects/{projectId}/environments:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [Environments]
+      summary: Create environment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateEnvironmentRequest' }
+      responses:
+        '201':
+          description: Environment created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Environment' }
+    get:
+      tags: [Environments]
+      summary: List environments
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Environment list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvironmentListResponse' }
+  /api/v1/projects/{projectId}/environments/{environmentId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EnvironmentId'
+    get:
+      tags: [Environments]
+      summary: Get environment
+      responses:
+        '200':
+          description: Environment
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Environment' }
+    patch:
+      tags: [Environments]
+      summary: Update environment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateEnvironmentRequest' }
+      responses:
+        '200':
+          description: Updated environment
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Environment' }
+    delete:
+      tags: [Environments]
+      summary: Delete environment
+      responses:
+        '204': { description: Environment deleted }
+  /api/v1/projects/{projectId}/segments:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [Segments]
+      summary: Create segment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSegmentRequest' }
+      responses:
+        '201':
+          description: Segment created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Segment' }
+    get:
+      tags: [Segments]
+      summary: List segments
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Segment list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SegmentListResponse' }
+  /api/v1/projects/{projectId}/segments/{segmentId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/SegmentId'
+    get:
+      tags: [Segments]
+      summary: Get segment
+      responses:
+        '200':
+          description: Segment
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Segment' }
+    patch:
+      tags: [Segments]
+      summary: Update segment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateSegmentRequest' }
+      responses:
+        '200':
+          description: Updated segment
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Segment' }
+    delete:
+      tags: [Segments]
+      summary: Delete segment
+      responses:
+        '204': { description: Segment deleted }
   /api/v1/projects/{projectId}/flags:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -119,20 +220,13 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/CreateFlagRequest'
+            schema: { $ref: '#/components/schemas/CreateFlagRequest' }
       responses:
         '201':
           description: Flag created
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Flag'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '409': { $ref: '#/components/responses/Error409' }
-        '410': { $ref: '#/components/responses/Error410' }
-        '422': { $ref: '#/components/responses/Error422' }
+              schema: { $ref: '#/components/schemas/Flag' }
     get:
       tags: [Flags]
       summary: List flags
@@ -141,19 +235,13 @@ paths:
         - $ref: '#/components/parameters/Offset'
         - name: include_archived
           in: query
-          schema:
-            type: boolean
-            default: false
+          schema: { type: boolean, default: false }
       responses:
         '200':
           description: Flag list
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/FlagListResponse'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '410': { $ref: '#/components/responses/Error410' }
+              schema: { $ref: '#/components/schemas/FlagListResponse' }
   /api/v1/projects/{projectId}/flags/{flagId}:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -166,11 +254,7 @@ paths:
           description: Flag
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Flag'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '404': { $ref: '#/components/responses/Error404' }
+              schema: { $ref: '#/components/schemas/Flag' }
     patch:
       tags: [Flags]
       summary: Update flag
@@ -178,30 +262,51 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateFlagRequest'
+            schema: { $ref: '#/components/schemas/UpdateFlagRequest' }
       responses:
         '200':
           description: Updated flag
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Flag'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '404': { $ref: '#/components/responses/Error404' }
-        '409': { $ref: '#/components/responses/Error409' }
-        '410': { $ref: '#/components/responses/Error410' }
-        '422': { $ref: '#/components/responses/Error422' }
+              schema: { $ref: '#/components/schemas/Flag' }
     delete:
       tags: [Flags]
       summary: Delete flag or archive it if overrides exist
       responses:
-        '204':
-          description: Flag deleted or archived
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '404': { $ref: '#/components/responses/Error404' }
+        '204': { description: Flag deleted or archived }
+  /api/v1/projects/{projectId}/flags/{flagId}/environments/{environmentKey}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/FlagId'
+      - $ref: '#/components/parameters/EnvironmentKey'
+    get:
+      tags: [Flags]
+      summary: Get environment-specific flag config
+      responses:
+        '200':
+          description: Environment config
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FlagEnvironmentConfig' }
+    put:
+      tags: [Flags]
+      summary: Create or replace environment-specific flag config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PutFlagEnvironmentConfigRequest' }
+      responses:
+        '200':
+          description: Environment config upserted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FlagEnvironmentConfig' }
+    delete:
+      tags: [Flags]
+      summary: Reset environment-specific config to inherited defaults
+      responses:
+        '204': { description: Flag environment config reset }
   /api/v1/projects/{projectId}/clients:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -212,20 +317,13 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/CreateClientRequest'
+            schema: { $ref: '#/components/schemas/CreateClientRequest' }
       responses:
         '201':
           description: Client created
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Client'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '409': { $ref: '#/components/responses/Error409' }
-        '410': { $ref: '#/components/responses/Error410' }
-        '422': { $ref: '#/components/responses/Error422' }
+              schema: { $ref: '#/components/schemas/Client' }
     get:
       tags: [Clients]
       summary: List clients
@@ -237,11 +335,7 @@ paths:
           description: Client list
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ClientListResponse'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '410': { $ref: '#/components/responses/Error410' }
+              schema: { $ref: '#/components/schemas/ClientListResponse' }
   /api/v1/projects/{projectId}/clients/{clientId}:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -254,12 +348,7 @@ paths:
           description: Client
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Client'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '404': { $ref: '#/components/responses/Error404' }
-        '410': { $ref: '#/components/responses/Error410' }
+              schema: { $ref: '#/components/schemas/Client' }
     patch:
       tags: [Clients]
       summary: Update client
@@ -267,30 +356,18 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateClientRequest'
+            schema: { $ref: '#/components/schemas/UpdateClientRequest' }
       responses:
         '200':
           description: Updated client
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Client'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '404': { $ref: '#/components/responses/Error404' }
-        '409': { $ref: '#/components/responses/Error409' }
-        '410': { $ref: '#/components/responses/Error410' }
-        '422': { $ref: '#/components/responses/Error422' }
+              schema: { $ref: '#/components/schemas/Client' }
     delete:
       tags: [Clients]
-      summary: Soft delete client
+      summary: Delete client
       responses:
-        '204':
-          description: Client deleted
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '404': { $ref: '#/components/responses/Error404' }
+        '204': { description: Client deleted }
   /api/v1/projects/{projectId}/clients/{clientId}/flags/{flagId}/override:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -303,30 +380,18 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/PutOverrideRequest'
+            schema: { $ref: '#/components/schemas/PutOverrideRequest' }
       responses:
         '200':
           description: Override upserted
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Override'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '404': { $ref: '#/components/responses/Error404' }
-        '409': { $ref: '#/components/responses/Error409' }
-        '410': { $ref: '#/components/responses/Error410' }
-        '422': { $ref: '#/components/responses/Error422' }
+              schema: { $ref: '#/components/schemas/Override' }
     delete:
       tags: [Overrides]
       summary: Delete a client override
       responses:
-        '204':
-          description: Override deleted
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '404': { $ref: '#/components/responses/Error404' }
+        '204': { description: Override deleted }
   /api/v1/projects/{projectId}/clients/{clientId}/overrides:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -339,12 +404,31 @@ paths:
           description: Override list
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/OverrideListResponse'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '404': { $ref: '#/components/responses/Error404' }
-        '410': { $ref: '#/components/responses/Error410' }
+              schema: { $ref: '#/components/schemas/OverrideListResponse' }
+  /api/v1/projects/{projectId}/evaluation-events:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Events]
+      summary: List evaluation events
+      parameters:
+        - name: environment
+          in: query
+          schema: { type: string }
+        - name: flag_id
+          in: query
+          schema: { type: string }
+        - name: client_id
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Evaluation event list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EvaluationEventListResponse' }
   /api/v1/keys:
     post:
       tags: [Keys]
@@ -353,28 +437,20 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/CreateKeyRequest'
+            schema: { $ref: '#/components/schemas/CreateKeyRequest' }
       responses:
         '201':
           description: Key created
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/CreatedKey'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '409': { $ref: '#/components/responses/Error409' }
-        '410': { $ref: '#/components/responses/Error410' }
-        '422': { $ref: '#/components/responses/Error422' }
+              schema: { $ref: '#/components/schemas/CreatedKey' }
     get:
       tags: [Keys]
       summary: List API keys
       parameters:
         - name: project_id
           in: query
-          schema:
-            type: string
+          schema: { type: string }
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
       responses:
@@ -382,85 +458,74 @@ paths:
           description: Key list
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/KeyListResponse'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
+              schema: { $ref: '#/components/schemas/KeyListResponse' }
   /api/v1/keys/{keyId}:
     parameters:
       - $ref: '#/components/parameters/KeyId'
     get:
       tags: [Keys]
-      summary: Get API key
+      summary: Get key
       responses:
         '200':
-          description: Key
+          description: API key
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ApiKey'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '404': { $ref: '#/components/responses/Error404' }
+              schema: { $ref: '#/components/schemas/ApiKey' }
   /api/v1/keys/{keyId}/revoke:
     parameters:
       - $ref: '#/components/parameters/KeyId'
     post:
       tags: [Keys]
-      summary: Revoke API key
+      summary: Revoke key
       responses:
-        '204':
-          description: Key revoked
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '404': { $ref: '#/components/responses/Error404' }
+        '204': { description: Key revoked }
   /api/v1/runtime/config:
     get:
       tags: [Runtime]
       summary: Resolve config for the runtime key's bound client
+      parameters:
+        - name: environment
+          in: query
+          schema: { type: string, description: Environment key, defaults to the project's default environment }
       responses:
         '200':
           description: Resolved config
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ResolvedConfig'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '404': { $ref: '#/components/responses/Error404' }
+              schema: { $ref: '#/components/schemas/ResolvedConfig' }
   /api/v1/runtime/config/{flagKey}:
     parameters:
       - $ref: '#/components/parameters/FlagKey'
     get:
       tags: [Runtime]
       summary: Resolve a single flag for the runtime key's bound client
+      parameters:
+        - name: environment
+          in: query
+          schema: { type: string }
       responses:
         '200':
-          description: Single resolved flag
+          description: Resolved flag
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ResolvedFlag'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '404': { $ref: '#/components/responses/Error404' }
+              schema: { $ref: '#/components/schemas/ResolvedFlag' }
   /api/v1/runtime/projects/{projectId}/clients/{clientKey}/config:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
       - $ref: '#/components/parameters/ClientKey'
     get:
       tags: [Runtime]
-      summary: Resolve config for a project client
+      summary: Resolve config for a project client in the given or default environment
+      parameters:
+        - name: environment
+          in: query
+          schema: { type: string }
       responses:
         '200':
           description: Resolved config
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ResolvedConfig'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '404': { $ref: '#/components/responses/Error404' }
+              schema: { $ref: '#/components/schemas/ResolvedConfig' }
   /api/v1/runtime/projects/{projectId}/clients/{clientKey}/config/{flagKey}:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -468,17 +533,59 @@ paths:
       - $ref: '#/components/parameters/FlagKey'
     get:
       tags: [Runtime]
-      summary: Resolve a single flag for a project client
+      summary: Resolve one flag for a project client in the given or default environment
+      parameters:
+        - name: environment
+          in: query
+          schema: { type: string }
       responses:
         '200':
-          description: Single resolved flag
+          description: Resolved flag
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ResolvedFlag'
-        '401': { $ref: '#/components/responses/Error401' }
-        '403': { $ref: '#/components/responses/Error403' }
-        '404': { $ref: '#/components/responses/Error404' }
+              schema: { $ref: '#/components/schemas/ResolvedFlag' }
+  /api/v1/runtime/projects/{projectId}/environments/{environmentKey}/clients/{clientKey}/config:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EnvironmentKey'
+      - $ref: '#/components/parameters/ClientKey'
+    get:
+      tags: [Runtime]
+      summary: Resolve config for a project client in a specific environment
+      responses:
+        '200':
+          description: Resolved config
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResolvedConfig' }
+  /api/v1/runtime/projects/{projectId}/environments/{environmentKey}/clients/{clientKey}/config/{flagKey}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EnvironmentKey'
+      - $ref: '#/components/parameters/ClientKey'
+      - $ref: '#/components/parameters/FlagKey'
+    get:
+      tags: [Runtime]
+      summary: Resolve one flag for a project client in a specific environment
+      responses:
+        '200':
+          description: Resolved flag
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResolvedFlag' }
+  /api/v1/runtime/projects/{projectId}/environments/{environmentKey}/snapshot:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EnvironmentKey'
+    get:
+      tags: [Runtime]
+      summary: Produce a local-evaluation snapshot for an environment
+      responses:
+        '200':
+          description: Snapshot
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RuntimeSnapshot' }
 components:
   securitySchemes:
     bearerAuth:
@@ -488,6 +595,21 @@ components:
   parameters:
     ProjectId:
       name: projectId
+      in: path
+      required: true
+      schema: { type: string }
+    EnvironmentId:
+      name: environmentId
+      in: path
+      required: true
+      schema: { type: string }
+    EnvironmentKey:
+      name: environmentKey
+      in: path
+      required: true
+      schema: { type: string }
+    SegmentId:
+      name: segmentId
       in: path
       required: true
       schema: { type: string }
@@ -531,43 +653,6 @@ components:
         type: integer
         minimum: 0
         default: 0
-  responses:
-    Error401:
-      description: Unauthorized
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    Error403:
-      description: Forbidden
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    Error404:
-      description: Not found
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    Error409:
-      description: Conflict or unsupported operation
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    Error410:
-      description: Resource deleted
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    Error422:
-      description: Validation failed
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
   schemas:
     Project:
       type: object
@@ -577,44 +662,134 @@ components:
         name: { type: string }
         slug: { type: string }
         description: { type: [string, 'null'] }
-        status:
-          type: string
-          enum: [active, deleted]
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-        deleted_at:
-          type: [string, 'null']
-          format: date-time
-    Flag:
+        status: { type: string, enum: [active, deleted] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        deleted_at: { type: [string, 'null'], format: date-time }
+    Environment:
       type: object
-      required: [id, project_id, key, name, type, default_value, status, created_at, updated_at]
+      required: [id, project_id, key, name, is_default, sort_order, status, created_at, updated_at]
       properties:
         id: { type: string }
         project_id: { type: string }
         key: { type: string }
         name: { type: string }
         description: { type: [string, 'null'] }
-        type:
-          type: string
-          enum: [boolean, select, multi_select]
-        default_value:
-          $ref: '#/components/schemas/FlagValue'
+        is_default: { type: integer }
+        sort_order: { type: integer }
+        status: { type: string, enum: [active, deleted] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        deleted_at: { type: [string, 'null'], format: date-time }
+    Condition:
+      type: object
+      required: [attribute, operator]
+      properties:
+        attribute: { type: string }
+        operator: { type: string }
+        value: {}
+        values:
+          type: array
+          items: {}
+    Segment:
+      type: object
+      required: [id, project_id, key, name, rules, status, created_at, updated_at]
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        key: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        rules:
+          type: array
+          items: { $ref: '#/components/schemas/Condition' }
+        status: { type: string, enum: [active, deleted] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        deleted_at: { type: [string, 'null'], format: date-time }
+    Variant:
+      type: object
+      required: [key, name, value]
+      properties:
+        key: { type: string }
+        name: { type: string }
+        value: {}
+        payload:
+          type: [object, 'null']
+          additionalProperties: true
+    Prerequisite:
+      type: object
+      required: [flag_key]
+      properties:
+        flag_key: { type: string }
+        expected_variant_key: { type: [string, 'null'] }
+        expected_value: {}
+    Flag:
+      type: object
+      required: [id, project_id, key, name, flag_kind, type, default_value, status, created_at, updated_at, stale_status]
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        key: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        flag_kind: { type: string, enum: [release, experiment, ops, permission] }
+        type: { type: string, enum: [boolean, select, multi_select] }
+        default_value: {}
         options:
           type: [array, 'null']
           items: { type: string }
-        status:
-          type: string
-          enum: [active, archived]
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
+        variants:
+          type: [array, 'null']
+          items: { $ref: '#/components/schemas/Variant' }
+        default_variant_key: { type: [string, 'null'] }
+        prerequisites:
+          type: [array, 'null']
+          items: { $ref: '#/components/schemas/Prerequisite' }
+        status: { type: string, enum: [active, archived] }
+        expires_at: { type: [string, 'null'], format: date-time }
+        last_evaluated_at: { type: [string, 'null'], format: date-time }
+        stale_status: { type: string, enum: [active, stale] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    TargetRule:
+      type: object
+      required: [name, conditions, segment_keys, bucketing_key, serve]
+      properties:
+        name: { type: string }
+        conditions:
+          type: array
+          items: { $ref: '#/components/schemas/Condition' }
+        segment_keys:
+          type: array
+          items: { type: string }
+        percentage: { type: number }
+        bucketing_key: { type: string }
+        schedule:
+          type: [object, 'null']
+          properties:
+            start_at: { type: [string, 'null'] }
+            end_at: { type: [string, 'null'] }
+        serve:
+          type: object
+          properties:
+            value: {}
+            variant_key: { type: [string, 'null'] }
+    FlagEnvironmentConfig:
+      type: object
+      required: [flag_id, environment_id, rules]
+      properties:
+        id: { type: [string, 'null'] }
+        flag_id: { type: string }
+        environment_id: { type: string }
+        default_value: {}
+        default_variant_key: { type: [string, 'null'] }
+        rules:
+          type: array
+          items: { $ref: '#/components/schemas/TargetRule' }
+        environment: { $ref: '#/components/schemas/Environment' }
+        created_at: { type: [string, 'null'], format: date-time }
+        updated_at: { type: [string, 'null'], format: date-time }
     Client:
       type: object
       required: [id, project_id, key, name, status, metadata, created_at, updated_at]
@@ -624,21 +799,13 @@ components:
         key: { type: string }
         name: { type: string }
         description: { type: [string, 'null'] }
-        status:
-          type: string
-          enum: [active, disabled, deleted]
+        status: { type: string, enum: [active, disabled, deleted] }
         metadata:
           type: object
           additionalProperties: true
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-        deleted_at:
-          type: [string, 'null']
-          format: date-time
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        deleted_at: { type: [string, 'null'], format: date-time }
     Override:
       type: object
       required: [id, project_id, flag_id, client_id, value, created_at, updated_at]
@@ -647,14 +814,9 @@ components:
         project_id: { type: string }
         flag_id: { type: string }
         client_id: { type: string }
-        value:
-          $ref: '#/components/schemas/FlagValue'
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
+        value: {}
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
     ApiKey:
       type: object
       required: [id, name, prefix, kind, scopes, created_at]
@@ -664,24 +826,188 @@ components:
         client_id: { type: [string, 'null'] }
         name: { type: string }
         prefix: { type: string }
-        kind:
-          type: string
-          enum: [project_admin, project_read, client_runtime]
+        kind: { type: string }
         scopes:
           type: array
           items: { type: string }
-        last_used_at:
-          type: [string, 'null']
-          format: date-time
-        expires_at:
-          type: [string, 'null']
-          format: date-time
-        revoked_at:
-          type: [string, 'null']
-          format: date-time
-        created_at:
-          type: string
-          format: date-time
+        last_used_at: { type: [string, 'null'], format: date-time }
+        expires_at: { type: [string, 'null'], format: date-time }
+        revoked_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+    EvaluationEvent:
+      type: object
+      required: [id, project_id, environment_id, flag_id, client_id, value, reason, context, created_at]
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        environment_id: { type: string }
+        flag_id: { type: string }
+        client_id: { type: string }
+        variant_key: { type: [string, 'null'] }
+        value: {}
+        reason: { type: string }
+        matched_rule: { type: [string, 'null'] }
+        context:
+          type: object
+          additionalProperties: true
+        created_at: { type: string, format: date-time }
+    ResolvedFlagValue:
+      type: object
+      required: [value, reason, stale_status]
+      properties:
+        value: {}
+        variant_key: { type: [string, 'null'] }
+        payload:
+          type: [object, 'null']
+          additionalProperties: true
+        reason: { type: string }
+        matched_rule: { type: [string, 'null'] }
+        stale_status: { type: string, enum: [active, stale] }
+    ResolvedConfig:
+      type: object
+      required: [project, client, environment, flags, meta]
+      properties:
+        project:
+          type: object
+          properties:
+            id: { type: string }
+            slug: { type: [string, 'null'] }
+        client:
+          type: object
+          properties:
+            id: { type: string }
+            key: { type: string }
+        environment:
+          type: object
+          properties:
+            id: { type: string }
+            key: { type: string }
+            name: { type: string }
+        flags:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ResolvedFlagValue'
+        meta:
+          type: object
+          properties:
+            resolved_at: { type: string, format: date-time }
+    ResolvedFlag:
+      allOf:
+        - type: object
+          required: [key]
+          properties:
+            key: { type: string }
+        - $ref: '#/components/schemas/ResolvedFlagValue'
+    RuntimeSnapshot:
+      type: object
+      required: [project_id, environment, segments, flags, meta]
+      properties:
+        project_id: { type: string }
+        environment:
+          type: object
+          properties:
+            id: { type: string }
+            key: { type: string }
+            name: { type: string }
+        segments:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              name: { type: string }
+              rules:
+                type: array
+                items: { $ref: '#/components/schemas/Condition' }
+        flags:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              type: { type: string }
+              flag_kind: { type: string }
+              default_value: {}
+              default_variant_key: { type: [string, 'null'] }
+              options:
+                type: [array, 'null']
+                items: { type: string }
+              variants:
+                type: [array, 'null']
+                items: { $ref: '#/components/schemas/Variant' }
+              prerequisites:
+                type: [array, 'null']
+                items: { $ref: '#/components/schemas/Prerequisite' }
+              rules:
+                type: array
+                items: { $ref: '#/components/schemas/TargetRule' }
+              stale_status: { type: string }
+        meta:
+          type: object
+          properties:
+            generated_at: { type: string, format: date-time }
+            mode: { type: string }
+    ProjectListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Project' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+    EnvironmentListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Environment' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+    SegmentListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Segment' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+    FlagListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Flag' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+    ClientListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Client' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+    OverrideListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Override' }
+    KeyListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ApiKey' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+    EvaluationEventListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/EvaluationEvent' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+    PaginationMeta:
+      type: object
+      properties:
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
     CreatedKey:
       allOf:
         - $ref: '#/components/schemas/ApiKey'
@@ -689,79 +1015,109 @@ components:
           required: [secret]
           properties:
             secret: { type: string }
-    ResolvedConfig:
-      type: object
-      required: [project, client, flags, meta]
-      properties:
-        project:
-          type: object
-          required: [id, slug]
-          properties:
-            id: { type: string }
-            slug: { type: string }
-        client:
-          type: object
-          required: [id, key]
-          properties:
-            id: { type: string }
-            key: { type: string }
-        flags:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/FlagValue'
-        meta:
-          type: object
-          required: [resolved_at]
-          properties:
-            resolved_at:
-              type: string
-              format: date-time
-    ResolvedFlag:
-      type: object
-      required: [key, value]
-      properties:
-        key: { type: string }
-        value:
-          $ref: '#/components/schemas/FlagValue'
-    ErrorResponse:
-      type: object
-      required: [error]
-      properties:
-        error:
-          type: object
-          required: [code, message]
-          properties:
-            code: { type: string }
-            message: { type: string }
-            details:
-              type: [array, 'null']
-              items:
-                type: object
-                additionalProperties: true
     CreateProjectRequest:
       type: object
       required: [name, slug]
       properties:
         name: { type: string }
-        slug:
-          type: string
-          pattern: '^[a-z0-9-]+$'
+        slug: { type: string }
         description: { type: [string, 'null'] }
     UpdateProjectRequest:
       type: object
       properties:
         name: { type: string }
-        slug:
-          type: string
-          pattern: '^[a-z0-9-]+$'
+        slug: { type: string }
         description: { type: [string, 'null'] }
+    CreateEnvironmentRequest:
+      type: object
+      required: [key, name]
+      properties:
+        key: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        is_default: { type: boolean }
+        sort_order: { type: integer }
+    UpdateEnvironmentRequest:
+      type: object
+      properties:
+        key: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        is_default: { type: boolean }
+        sort_order: { type: integer }
+    CreateSegmentRequest:
+      type: object
+      required: [key, name, rules]
+      properties:
+        key: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        rules:
+          type: array
+          items: { $ref: '#/components/schemas/Condition' }
+    UpdateSegmentRequest:
+      type: object
+      properties:
+        key: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        rules:
+          type: array
+          items: { $ref: '#/components/schemas/Condition' }
+    CreateFlagRequest:
+      type: object
+      required: [key, name, type, default_value]
+      properties:
+        key: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        flag_kind: { type: string, enum: [release, experiment, ops, permission] }
+        type: { type: string, enum: [boolean, select, multi_select] }
+        default_value: {}
+        options:
+          type: [array, 'null']
+          items: { type: string }
+        variants:
+          type: [array, 'null']
+          items: { $ref: '#/components/schemas/Variant' }
+        default_variant_key: { type: [string, 'null'] }
+        prerequisites:
+          type: [array, 'null']
+          items: { $ref: '#/components/schemas/Prerequisite' }
+        expires_at: { type: [string, 'null'] }
+    UpdateFlagRequest:
+      type: object
+      properties:
+        key: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        flag_kind: { type: string, enum: [release, experiment, ops, permission] }
+        default_value: {}
+        options:
+          type: [array, 'null']
+          items: { type: string }
+        variants:
+          type: [array, 'null']
+          items: { $ref: '#/components/schemas/Variant' }
+        default_variant_key: { type: [string, 'null'] }
+        prerequisites:
+          type: [array, 'null']
+          items: { $ref: '#/components/schemas/Prerequisite' }
+        expires_at: { type: [string, 'null'] }
+        status: { type: string, enum: [active, archived] }
+    PutFlagEnvironmentConfigRequest:
+      type: object
+      properties:
+        default_value: {}
+        default_variant_key: { type: [string, 'null'] }
+        rules:
+          type: array
+          items: { $ref: '#/components/schemas/TargetRule' }
     CreateClientRequest:
       type: object
       required: [key, name]
       properties:
-        key:
-          type: string
-          pattern: '^[a-z0-9_-]+$'
+        key: { type: string }
         name: { type: string }
         description: { type: [string, 'null'] }
         metadata:
@@ -770,161 +1126,27 @@ components:
     UpdateClientRequest:
       type: object
       properties:
-        key:
-          type: string
-          pattern: '^[a-z0-9_-]+$'
+        key: { type: string }
         name: { type: string }
         description: { type: [string, 'null'] }
-        status:
-          type: string
-          enum: [active, disabled, deleted]
+        status: { type: string, enum: [active, disabled, deleted] }
         metadata:
           type: object
           additionalProperties: true
-    CreateKeyRequest:
-      type: object
-      required: [kind, name]
-      properties:
-        kind:
-          type: string
-          enum: [project_admin, project_read, client_runtime]
-        name: { type: string }
-        project_id: { type: string }
-        client_id: { type: [string, 'null'] }
-        scopes:
-          type: array
-          items: { type: string }
-        expires_at:
-          type: [string, 'null']
-          format: date-time
     PutOverrideRequest:
       type: object
       required: [value]
       properties:
-        value:
-          $ref: '#/components/schemas/FlagValue'
-    CreateFlagRequest:
-      oneOf:
-        - type: object
-          required: [key, name, type, default_value]
-          properties:
-            key:
-              type: string
-              pattern: '^[a-z0-9_-]+$'
-            name: { type: string }
-            description: { type: [string, 'null'] }
-            type: { const: boolean }
-            default_value: { type: boolean }
-        - type: object
-          required: [key, name, type, default_value, options]
-          properties:
-            key:
-              type: string
-              pattern: '^[a-z0-9_-]+$'
-            name: { type: string }
-            description: { type: [string, 'null'] }
-            type: { const: select }
-            default_value: { type: string }
-            options:
-              type: array
-              minItems: 1
-              maxItems: 100
-              items:
-                type: string
-                maxLength: 100
-        - type: object
-          required: [key, name, type, default_value, options]
-          properties:
-            key:
-              type: string
-              pattern: '^[a-z0-9_-]+$'
-            name: { type: string }
-            description: { type: [string, 'null'] }
-            type: { const: multi_select }
-            default_value:
-              type: array
-              items: { type: string }
-            options:
-              type: array
-              minItems: 1
-              maxItems: 100
-              items:
-                type: string
-                maxLength: 100
-    UpdateFlagRequest:
+        value: {}
+    CreateKeyRequest:
       type: object
+      required: [kind, name]
       properties:
-        key:
-          type: string
-          pattern: '^[a-z0-9_-]+$'
+        kind: { type: string, enum: [project_admin, project_read, client_runtime] }
+        project_id: { type: [string, 'null'] }
+        client_id: { type: [string, 'null'] }
         name: { type: string }
-        description: { type: [string, 'null'] }
-        default_value:
-          $ref: '#/components/schemas/FlagValue'
-        options:
-          type: [array, 'null']
+        scopes:
+          type: array
           items: { type: string }
-        status:
-          type: string
-          enum: [active, archived]
-    ProjectListResponse:
-      type: object
-      required: [items, meta]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Project'
-        meta:
-          $ref: '#/components/schemas/ListMeta'
-    FlagListResponse:
-      type: object
-      required: [items, meta]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Flag'
-        meta:
-          $ref: '#/components/schemas/ListMeta'
-    ClientListResponse:
-      type: object
-      required: [items, meta]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Client'
-        meta:
-          $ref: '#/components/schemas/ListMeta'
-    OverrideListResponse:
-      type: object
-      required: [items]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Override'
-    KeyListResponse:
-      type: object
-      required: [items, meta]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/ApiKey'
-        meta:
-          $ref: '#/components/schemas/ListMeta'
-    ListMeta:
-      type: object
-      required: [total, limit, offset]
-      properties:
-        total: { type: integer }
-        limit: { type: integer }
-        offset: { type: integer }
-    FlagValue:
-      oneOf:
-        - type: boolean
-        - type: string
-        - type: array
-          items: { type: string }
+        expires_at: { type: [string, 'null'] }
