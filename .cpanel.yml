@@ -1,0 +1,16 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/rsrdev/flagify.rsrdev.com
+    - /bin/mkdir -p $DEPLOYPATH
+    - /bin/rm -rf $DEPLOYPATH/src $DEPLOYPATH/config $DEPLOYPATH/database $DEPLOYPATH/bin $DEPLOYPATH/public
+    - /bin/cp index.php $DEPLOYPATH/index.php
+    - /bin/cp autoload.php $DEPLOYPATH/autoload.php
+    - /bin/cp .htaccess $DEPLOYPATH/.htaccess
+    - /bin/cp .env.example $DEPLOYPATH/.env.example
+    - /bin/cp README.md $DEPLOYPATH/README.md
+    - /bin/cp -R src $DEPLOYPATH/
+    - /bin/cp -R config $DEPLOYPATH/
+    - /bin/cp -R database $DEPLOYPATH/
+    - /bin/cp -R bin $DEPLOYPATH/
+    - /bin/cp -R public $DEPLOYPATH/

@@ -1,0 +1,29 @@
+{
+  "name": "rsoley/flagify",
+  "description": "Lightweight PHP API for feature flags",
+  "type": "project",
+  "require": {
+    "php": "^8.3",
+    "slim/slim": "^4.14",
+    "slim/psr7": "^1.7",
+    "symfony/uid": "^7.2",
+    "vlucas/phpdotenv": "^5.6"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^11.5"
+  },
+  "autoload": {
+    "psr-4": {
+      "Flagify\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Flagify\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "phpunit",
+    "migrate": "php bin/migrate.php"
+  }
+}
