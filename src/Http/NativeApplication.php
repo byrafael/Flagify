@@ -11,9 +11,13 @@ use Flagify\Auth\ScopeAuthorizer;
 use Flagify\Domain\KeyKind;
 use Flagify\Repository\ApiKeyRepository;
 use Flagify\Repository\ClientRepository;
+use Flagify\Repository\EnvironmentRepository;
+use Flagify\Repository\EvaluationEventRepository;
+use Flagify\Repository\FlagEnvironmentRepository;
 use Flagify\Repository\FlagRepository;
 use Flagify\Repository\OverrideRepository;
 use Flagify\Repository\ProjectRepository;
+use Flagify\Repository\SegmentRepository;
 use Flagify\Service\FlagValueValidator;
 use Flagify\Service\ResolvedConfigService;
 use Flagify\Support\ApiError;
@@ -31,7 +35,11 @@ final class NativeApplication
         private readonly ProjectRepository $projects,
         private readonly FlagRepository $flags,
         private readonly ClientRepository $clients,
+        private readonly EnvironmentRepository $environments,
+        private readonly SegmentRepository $segments,
+        private readonly FlagEnvironmentRepository $flagEnvironments,
         private readonly OverrideRepository $overrides,
+        private readonly EvaluationEventRepository $events,
         private readonly ApiKeyRepository $apiKeys,
         private readonly FlagValueValidator $validator,
         private readonly ResolvedConfigService $resolvedConfig
@@ -48,7 +56,7 @@ final class NativeApplication
                     'code' => $error->codeName(),
                     'message' => $error->getMessage(),
                     'details' => $error->details() === [] ? null : $error->details(),
-                ], static fn(mixed $value): bool => $value !== null),
+                ], static fn (mixed $value): bool => $value !== null),
             ]);
         } catch (PDOException $error) {
             $message = strtolower($error->getMessage());
@@ -96,6 +104,36 @@ final class NativeApplication
                 default => throw new ApiError('not_found', 'Route not found', 404),
             };
         }
+        if (preg_match('#^/api/v1/projects/([^/]+)/environments$#', $path, $m) === 1) {
+            return match ($method) {
+                'POST' => $this->createEnvironment($principal, $m[1]),
+                'GET' => $this->listEnvironments($principal, $m[1]),
+                default => throw new ApiError('not_found', 'Route not found', 404),
+            };
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/environments/([^/]+)$#', $path, $m) === 1) {
+            return match ($method) {
+                'GET' => $this->showEnvironment($principal, $m[1], $m[2]),
+                'PATCH' => $this->updateEnvironment($principal, $m[1], $m[2]),
+                'DELETE' => $this->deleteEnvironment($principal, $m[1], $m[2]),
+                default => throw new ApiError('not_found', 'Route not found', 404),
+            };
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/segments$#', $path, $m) === 1) {
+            return match ($method) {
+                'POST' => $this->createSegment($principal, $m[1]),
+                'GET' => $this->listSegments($principal, $m[1]),
+                default => throw new ApiError('not_found', 'Route not found', 404),
+            };
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/segments/([^/]+)$#', $path, $m) === 1) {
+            return match ($method) {
+                'GET' => $this->showSegment($principal, $m[1], $m[2]),
+                'PATCH' => $this->updateSegment($principal, $m[1], $m[2]),
+                'DELETE' => $this->deleteSegment($principal, $m[1], $m[2]),
+                default => throw new ApiError('not_found', 'Route not found', 404),
+            };
+        }
         if (preg_match('#^/api/v1/projects/([^/]+)/flags$#', $path, $m) === 1) {
             return match ($method) {
                 'POST' => $this->createFlag($principal, $m[1]),
@@ -108,6 +146,14 @@ final class NativeApplication
                 'GET' => $this->showFlag($principal, $m[1], $m[2]),
                 'PATCH' => $this->updateFlag($principal, $m[1], $m[2]),
                 'DELETE' => $this->deleteFlag($principal, $m[1], $m[2]),
+                default => throw new ApiError('not_found', 'Route not found', 404),
+            };
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/flags/([^/]+)/environments/([^/]+)$#', $path, $m) === 1) {
+            return match ($method) {
+                'GET' => $this->showFlagEnvironment($principal, $m[1], $m[2], $m[3]),
+                'PUT' => $this->putFlagEnvironment($principal, $m[1], $m[2], $m[3]),
+                'DELETE' => $this->deleteFlagEnvironment($principal, $m[1], $m[2], $m[3]),
                 default => throw new ApiError('not_found', 'Route not found', 404),
             };
         }
@@ -136,6 +182,9 @@ final class NativeApplication
         if (preg_match('#^/api/v1/projects/([^/]+)/clients/([^/]+)/overrides$#', $path, $m) === 1 && $method === 'GET') {
             return $this->listOverrides($principal, $m[1], $m[2]);
         }
+        if (preg_match('#^/api/v1/projects/([^/]+)/evaluation-events$#', $path, $m) === 1 && $method === 'GET') {
+            return $this->listEvaluationEvents($principal, $m[1]);
+        }
         if ($method === 'POST' && $path === '/api/v1/keys') {
             return $this->createKey($principal);
         }
@@ -155,10 +204,19 @@ final class NativeApplication
             return $this->currentRuntimeFlag($principal, $m[1]);
         }
         if (preg_match('#^/api/v1/runtime/projects/([^/]+)/clients/([^/]+)/config$#', $path, $m) === 1 && $method === 'GET') {
-            return $this->projectClientConfig($principal, $m[1], $m[2]);
+            return $this->projectClientConfig($principal, $m[1], $m[2], $this->query('environment'));
         }
         if (preg_match('#^/api/v1/runtime/projects/([^/]+)/clients/([^/]+)/config/([^/]+)$#', $path, $m) === 1 && $method === 'GET') {
-            return $this->projectClientFlag($principal, $m[1], $m[2], $m[3]);
+            return $this->projectClientFlag($principal, $m[1], $m[2], $m[3], $this->query('environment'));
+        }
+        if (preg_match('#^/api/v1/runtime/projects/([^/]+)/environments/([^/]+)/clients/([^/]+)/config$#', $path, $m) === 1 && $method === 'GET') {
+            return $this->projectClientConfig($principal, $m[1], $m[3], $m[2]);
+        }
+        if (preg_match('#^/api/v1/runtime/projects/([^/]+)/environments/([^/]+)/clients/([^/]+)/config/([^/]+)$#', $path, $m) === 1 && $method === 'GET') {
+            return $this->projectClientFlag($principal, $m[1], $m[3], $m[4], $m[2]);
+        }
+        if (preg_match('#^/api/v1/runtime/projects/([^/]+)/environments/([^/]+)/snapshot$#', $path, $m) === 1 && $method === 'GET') {
+            return $this->projectEnvironmentSnapshot($principal, $m[1], $m[2]);
         }
 
         throw new ApiError('not_found', 'Route not found', 404);
@@ -173,6 +231,7 @@ final class NativeApplication
             'slug' => $this->requireSlug($payload, 'slug'),
             'description' => $this->nullableString($payload['description'] ?? null),
         ]);
+        $this->environments->createDefaultsForProject($project['id']);
 
         return new ApiResponse(201, $this->normalize($project));
     }
@@ -239,6 +298,174 @@ final class NativeApplication
         return new ApiResponse(204, null);
     }
 
+    private function createEnvironment(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
+        $this->assertProjectActive($projectId);
+        $payload = $this->body();
+
+        foreach (['key', 'name'] as $field) {
+            if (!array_key_exists($field, $payload)) {
+                throw new ApiError('validation_failed', sprintf('%s is required', $field), 422);
+            }
+        }
+
+        $environment = $this->environments->create([
+            'project_id' => $projectId,
+            'key' => $this->resourceKey($payload, 'key'),
+            'name' => $this->requireString($payload, 'name'),
+            'description' => $this->nullableString($payload['description'] ?? null),
+            'is_default' => $this->boolValue($payload['is_default'] ?? false),
+            'sort_order' => $this->intValue($payload['sort_order'] ?? 100, 'sort_order', 0, 10000),
+        ]);
+
+        foreach ($this->flags->activeByProject($projectId) as $flag) {
+            $this->flagEnvironments->createDefaultForFlag($flag['id'], $environment['id'], $flag['default_value'], $flag['default_variant_key'] ?? null);
+        }
+
+        return new ApiResponse(201, $this->normalize($environment));
+    }
+
+    private function listEnvironments(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_READ, $projectId);
+        $this->assertProjectActive($projectId);
+        $limit = $this->limit();
+        $offset = $this->offset();
+
+        return new ApiResponse(200, [
+            'items' => array_map($this->normalize(...), $this->environments->paginateByProject($projectId, $limit, $offset)),
+            'meta' => ['total' => $this->environments->countByProject($projectId), 'limit' => $limit, 'offset' => $offset],
+        ]);
+    }
+
+    private function showEnvironment(ApiPrincipal $principal, string $projectId, string $environmentId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_READ, $projectId);
+        $this->assertProjectActive($projectId);
+
+        return new ApiResponse(200, $this->normalize($this->requireEnvironment($projectId, $environmentId)));
+    }
+
+    private function updateEnvironment(ApiPrincipal $principal, string $projectId, string $environmentId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
+        $environment = $this->requireEnvironment($projectId, $environmentId);
+        if ($environment['status'] === 'deleted') {
+            throw new ApiError('resource_deleted', 'Environment has been deleted', 410);
+        }
+
+        $payload = $this->body();
+        $updates = [];
+        if (array_key_exists('key', $payload)) {
+            $updates['key'] = $this->resourceKey($payload, 'key');
+        }
+        if (array_key_exists('name', $payload)) {
+            $updates['name'] = $this->requireString($payload, 'name');
+        }
+        if (array_key_exists('description', $payload)) {
+            $updates['description'] = $this->nullableString($payload['description']);
+        }
+        if (array_key_exists('sort_order', $payload)) {
+            $updates['sort_order'] = $this->intValue($payload['sort_order'], 'sort_order', 0, 10000);
+        }
+        if (array_key_exists('is_default', $payload)) {
+            $updates['is_default'] = $this->boolValue($payload['is_default']);
+        }
+
+        return new ApiResponse(200, $this->normalize($this->environments->update($projectId, $environmentId, $updates)));
+    }
+
+    private function deleteEnvironment(ApiPrincipal $principal, string $projectId, string $environmentId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
+        $environment = $this->requireEnvironment($projectId, $environmentId);
+        if ((int) $environment['is_default'] === 1) {
+            throw new ApiError('unsupported_operation', 'Default environment cannot be deleted', 409);
+        }
+
+        $this->environments->softDelete($projectId, $environmentId);
+
+        return new ApiResponse(204, null);
+    }
+
+    private function createSegment(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
+        $this->assertProjectActive($projectId);
+        $payload = $this->body();
+        foreach (['key', 'name', 'rules'] as $field) {
+            if (!array_key_exists($field, $payload)) {
+                throw new ApiError('validation_failed', sprintf('%s is required', $field), 422);
+            }
+        }
+
+        $segment = $this->segments->create([
+            'project_id' => $projectId,
+            'key' => $this->resourceKey($payload, 'key'),
+            'name' => $this->requireString($payload, 'name'),
+            'description' => $this->nullableString($payload['description'] ?? null),
+            'rules' => $this->conditions($payload['rules'], 'rules'),
+        ]);
+
+        return new ApiResponse(201, $this->normalize($segment));
+    }
+
+    private function listSegments(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_READ, $projectId);
+        $this->assertProjectActive($projectId);
+        $limit = $this->limit();
+        $offset = $this->offset();
+
+        return new ApiResponse(200, [
+            'items' => array_map($this->normalize(...), $this->segments->paginateByProject($projectId, $limit, $offset)),
+            'meta' => ['total' => $this->segments->countByProject($projectId), 'limit' => $limit, 'offset' => $offset],
+        ]);
+    }
+
+    private function showSegment(ApiPrincipal $principal, string $projectId, string $segmentId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_READ, $projectId);
+        $this->assertProjectActive($projectId);
+
+        return new ApiResponse(200, $this->normalize($this->requireSegment($projectId, $segmentId)));
+    }
+
+    private function updateSegment(ApiPrincipal $principal, string $projectId, string $segmentId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
+        $this->assertProjectActive($projectId);
+        $this->requireSegment($projectId, $segmentId);
+        $payload = $this->body();
+
+        $updates = [];
+        if (array_key_exists('key', $payload)) {
+            $updates['key'] = $this->resourceKey($payload, 'key');
+        }
+        if (array_key_exists('name', $payload)) {
+            $updates['name'] = $this->requireString($payload, 'name');
+        }
+        if (array_key_exists('description', $payload)) {
+            $updates['description'] = $this->nullableString($payload['description']);
+        }
+        if (array_key_exists('rules', $payload)) {
+            $updates['rules'] = $this->conditions($payload['rules'], 'rules');
+        }
+
+        return new ApiResponse(200, $this->normalize($this->segments->update($projectId, $segmentId, $updates)));
+    }
+
+    private function deleteSegment(ApiPrincipal $principal, string $projectId, string $segmentId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
+        $this->assertProjectActive($projectId);
+        $this->requireSegment($projectId, $segmentId);
+        $this->segments->softDelete($projectId, $segmentId);
+
+        return new ApiResponse(204, null);
+    }
+
     private function createFlag(ApiPrincipal $principal, string $projectId): ApiResponse
     {
         $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
@@ -251,18 +478,35 @@ final class NativeApplication
             }
         }
 
-        $this->assertResourceKey($this->requireString($payload, 'key'), 'key');
-        $this->validator->validateFlag($payload['type'], $payload['default_value'], $payload['options'] ?? null);
+        $key = $this->resourceKey($payload, 'key');
+        $type = $this->requireString($payload, 'type');
+        $defaultValue = $payload['default_value'];
+        $options = $payload['options'] ?? null;
 
-        return new ApiResponse(201, $this->normalize($this->flags->create([
+        $this->validator->validateFlag($type, $defaultValue, $options);
+        $variants = $this->validator->validateVariants($type, $options, $payload['variants'] ?? null, $this->nullableString($payload['default_variant_key'] ?? null));
+        $prerequisites = $this->validator->validatePrerequisites($payload['prerequisites'] ?? null);
+
+        $flag = $this->flags->create([
             'project_id' => $projectId,
-            'key' => $payload['key'],
+            'key' => $key,
             'name' => $this->requireString($payload, 'name'),
             'description' => $this->nullableString($payload['description'] ?? null),
-            'type' => $payload['type'],
-            'default_value' => $payload['default_value'],
-            'options' => $payload['options'] ?? null,
-        ])));
+            'flag_kind' => $this->flagKind($payload['flag_kind'] ?? 'release'),
+            'type' => $type,
+            'default_value' => $defaultValue,
+            'options' => $options,
+            'variants' => $variants,
+            'default_variant_key' => $this->nullableString($payload['default_variant_key'] ?? null),
+            'expires_at' => $this->nullableString($payload['expires_at'] ?? null),
+            'prerequisites' => $prerequisites,
+        ]);
+
+        foreach ($this->environments->allActiveByProject($projectId) as $environment) {
+            $this->flagEnvironments->createDefaultForFlag($flag['id'], $environment['id'], $defaultValue, $flag['default_variant_key'] ?? null);
+        }
+
+        return new ApiResponse(201, $this->normalize($flag));
     }
 
     private function listFlags(ApiPrincipal $principal, string $projectId): ApiResponse
@@ -298,23 +542,63 @@ final class NativeApplication
             throw new ApiError('unsupported_operation', 'Flag type cannot be changed', 422);
         }
         if (array_key_exists('key', $payload)) {
-            $this->assertResourceKey($this->requireString($payload, 'key'), 'key');
+            $payload['key'] = $this->resourceKey($payload, 'key');
         }
         if (array_key_exists('status', $payload) && !in_array($payload['status'], ['active', 'archived'], true)) {
             throw new ApiError('validation_failed', 'status must be active or archived', 422);
         }
+        if (array_key_exists('flag_kind', $payload)) {
+            $payload['flag_kind'] = $this->flagKind($payload['flag_kind']);
+        }
         if (array_key_exists('description', $payload)) {
             $payload['description'] = $this->nullableString($payload['description']);
         }
+        if (array_key_exists('expires_at', $payload)) {
+            $payload['expires_at'] = $this->nullableString($payload['expires_at']);
+        }
 
-        $this->validator->assertOptionsCompatible(
-            $flag['type'],
-            $payload['default_value'] ?? $flag['default_value'],
-            array_key_exists('options', $payload) ? $payload['options'] : $flag['options'],
-            $this->overrides->valuesForFlag($flagId)
-        );
+        $defaultValue = array_key_exists('default_value', $payload) ? $payload['default_value'] : $flag['default_value'];
+        $options = array_key_exists('options', $payload) ? $payload['options'] : $flag['options'];
+        $variants = array_key_exists('variants', $payload)
+            ? $this->validator->validateVariants($flag['type'], $options, $payload['variants'], $this->nullableString($payload['default_variant_key'] ?? $flag['default_variant_key'] ?? null))
+            : $flag['variants'];
+        $defaultVariantKey = array_key_exists('default_variant_key', $payload)
+            ? $this->nullableString($payload['default_variant_key'])
+            : ($flag['default_variant_key'] ?? null);
 
-        return new ApiResponse(200, $this->normalize($this->flags->update($projectId, $flagId, $payload)));
+        $overrideValues = $this->overrides->valuesForFlag($flagId);
+        $this->validator->assertOptionsCompatible($flag['type'], $defaultValue, $options, $overrideValues);
+        if ($variants !== null) {
+            $this->validator->validateVariants($flag['type'], $options, $variants, $defaultVariantKey);
+        }
+        if (array_key_exists('prerequisites', $payload)) {
+            $payload['prerequisites'] = $this->validator->validatePrerequisites($payload['prerequisites']);
+        }
+        if (array_key_exists('default_variant_key', $payload) || $defaultVariantKey !== null) {
+            $payload['default_variant_key'] = $defaultVariantKey;
+        }
+        if (array_key_exists('variants', $payload)) {
+            $payload['variants'] = $variants;
+        }
+
+        $updated = $this->flags->update($projectId, $flagId, $payload);
+        if (array_key_exists('default_value', $payload) || array_key_exists('default_variant_key', $payload)) {
+            foreach ($this->flagEnvironments->forFlag($flagId) as $config) {
+                $matchesOldDefault = $config['default_value'] === $flag['default_value']
+                    && (($config['default_variant_key'] ?? null) === ($flag['default_variant_key'] ?? null));
+                if (!$matchesOldDefault) {
+                    continue;
+                }
+
+                $this->flagEnvironments->upsert($flagId, $config['environment_id'], [
+                    'default_value' => $updated['default_value'],
+                    'default_variant_key' => $updated['default_variant_key'] ?? null,
+                    'rules' => $config['rules'] ?? [],
+                ]);
+            }
+        }
+
+        return new ApiResponse(200, $this->normalize($updated));
     }
 
     private function deleteFlag(ApiPrincipal $principal, string $projectId, string $flagId): ApiResponse
@@ -326,8 +610,79 @@ final class NativeApplication
         if ($this->overrides->hasAnyForFlag($flagId)) {
             $this->flags->update($projectId, $flagId, ['status' => 'archived']);
         } else {
+            foreach ($this->flagEnvironments->forFlag($flagId) as $config) {
+                $this->flagEnvironments->delete($flagId, $config['environment_id']);
+            }
             $this->flags->delete($projectId, $flagId);
         }
+
+        return new ApiResponse(204, null);
+    }
+
+    private function showFlagEnvironment(ApiPrincipal $principal, string $projectId, string $flagId, string $environmentKey): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_READ, $projectId);
+        $flag = $this->requireFlag($projectId, $flagId);
+        $environment = $this->requireEnvironmentByKey($projectId, $environmentKey);
+        $config = $this->flagEnvironments->find($flag['id'], $environment['id']);
+        if ($config === null) {
+            $config = [
+                'flag_id' => $flag['id'],
+                'environment_id' => $environment['id'],
+                'default_value' => $flag['default_value'],
+                'default_variant_key' => $flag['default_variant_key'] ?? null,
+                'rules' => [],
+            ];
+        }
+
+        return new ApiResponse(200, $this->normalize([
+            ...$config,
+            'environment' => $environment,
+        ]));
+    }
+
+    private function putFlagEnvironment(ApiPrincipal $principal, string $projectId, string $flagId, string $environmentKey): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
+        $flag = $this->requireFlag($projectId, $flagId);
+        $environment = $this->requireEnvironmentByKey($projectId, $environmentKey);
+        $payload = $this->body();
+
+        $defaultValue = array_key_exists('default_value', $payload) ? $payload['default_value'] : $flag['default_value'];
+        $defaultVariantKey = array_key_exists('default_variant_key', $payload)
+            ? $this->nullableString($payload['default_variant_key'])
+            : ($flag['default_variant_key'] ?? null);
+        $existingConfig = $this->flagEnvironments->find($flag['id'], $environment['id']);
+        $rules = array_key_exists('rules', $payload)
+            ? $this->targetingRules($payload['rules'], $flag)
+            : (is_array($existingConfig) ? ($existingConfig['rules'] ?? []) : []);
+
+        $this->validator->validateValue($flag['type'], $defaultValue, $flag['options']);
+        if ($flag['variants'] !== null) {
+            $this->validator->validateVariants($flag['type'], $flag['options'], $flag['variants'], $defaultVariantKey);
+        } elseif ($defaultVariantKey !== null) {
+            throw new ApiError('validation_failed', 'default_variant_key requires variants on the flag', 422);
+        }
+
+        $config = $this->flagEnvironments->upsert($flag['id'], $environment['id'], [
+            'default_value' => $defaultValue,
+            'default_variant_key' => $defaultVariantKey,
+            'rules' => $rules,
+        ]);
+
+        return new ApiResponse(200, $this->normalize([
+            ...$config,
+            'environment' => $environment,
+        ]));
+    }
+
+    private function deleteFlagEnvironment(ApiPrincipal $principal, string $projectId, string $flagId, string $environmentKey): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
+        $flag = $this->requireFlag($projectId, $flagId);
+        $environment = $this->requireEnvironmentByKey($projectId, $environmentKey);
+        $this->flagEnvironments->delete($flag['id'], $environment['id']);
+        $this->flagEnvironments->createDefaultForFlag($flag['id'], $environment['id'], $flag['default_value'], $flag['default_variant_key'] ?? null);
 
         return new ApiResponse(204, null);
     }
@@ -344,11 +699,9 @@ final class NativeApplication
             }
         }
 
-        $this->assertResourceKey($this->requireString($payload, 'key'), 'key');
-
         return new ApiResponse(201, $this->normalize($this->clients->create([
             'project_id' => $projectId,
-            'key' => $payload['key'],
+            'key' => $this->resourceKey($payload, 'key'),
             'name' => $this->requireString($payload, 'name'),
             'description' => $this->nullableString($payload['description'] ?? null),
             'metadata' => $this->metadata($payload['metadata'] ?? []),
@@ -388,7 +741,7 @@ final class NativeApplication
         $payload = $this->body();
 
         if (array_key_exists('key', $payload)) {
-            $this->assertResourceKey($this->requireString($payload, 'key'), 'key');
+            $payload['key'] = $this->resourceKey($payload, 'key');
         }
         if (array_key_exists('status', $payload) && !in_array($payload['status'], ['active', 'disabled', 'deleted'], true)) {
             throw new ApiError('validation_failed', 'status must be active, disabled, or deleted', 422);
@@ -458,6 +811,31 @@ final class NativeApplication
         $this->overrides->delete($flagId, $clientId);
 
         return new ApiResponse(204, null);
+    }
+
+    private function listEvaluationEvents(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_READ, $projectId);
+        $this->assertProjectActive($projectId);
+        $limit = $this->limit();
+        $offset = $this->offset();
+
+        $environment = null;
+        $environmentKey = $this->query('environment');
+        if ($environmentKey !== null) {
+            $environment = $this->requireEnvironmentByKey($projectId, $environmentKey);
+        }
+        $flagId = $this->query('flag_id');
+        $clientId = $this->query('client_id');
+
+        return new ApiResponse(200, [
+            'items' => array_map($this->normalize(...), $this->events->paginateByProject($projectId, $limit, $offset, $environment['id'] ?? null, $flagId, $clientId)),
+            'meta' => [
+                'total' => $this->events->countByProject($projectId, $environment['id'] ?? null, $flagId, $clientId),
+                'limit' => $limit,
+                'offset' => $offset,
+            ],
+        ]);
     }
 
     private function createKey(ApiPrincipal $principal): ApiResponse
@@ -550,12 +928,14 @@ final class NativeApplication
 
     private function currentRuntimeConfig(ApiPrincipal $principal): ApiResponse
     {
-        $principal = $this->authorizer->requireScope($principal, ScopeAuthorizer::RUNTIME_READ, $principal->projectId, $principal->clientId);
+        $principal = $this->authorizer->requireScope($principal, ScopeAuthorizer::RUNTIME_READ, $principal?->projectId, $principal?->clientId);
         if ($principal->projectId === null || $principal->clientId === null) {
             throw new ApiError('forbidden', 'This key is not bound to a runtime client', 403);
         }
 
-        return new ApiResponse(200, $this->resolvedPayload($principal->projectId, $principal->clientId));
+        $environment = $this->environmentFromRequest($principal->projectId, $this->query('environment'));
+
+        return new ApiResponse(200, $this->resolvedPayload($principal->projectId, $principal->clientId, $environment, true));
     }
 
     private function currentRuntimeFlag(ApiPrincipal $principal, string $flagKey): ApiResponse
@@ -565,31 +945,40 @@ final class NativeApplication
             throw new ApiError('not_found', 'Flag not found', 404);
         }
 
-        return new ApiResponse(200, ['key' => $flagKey, 'value' => $payload['flags'][$flagKey]]);
+        return new ApiResponse(200, ['key' => $flagKey, ...$payload['flags'][$flagKey]]);
     }
 
-    private function projectClientConfig(ApiPrincipal $principal, string $projectId, string $clientKey): ApiResponse
+    private function projectClientConfig(ApiPrincipal $principal, string $projectId, string $clientKey, ?string $environmentKey): ApiResponse
     {
         $this->authorizer->requireScope($principal, ScopeAuthorizer::RUNTIME_READ_ANY, $projectId);
         $client = $this->clients->findByKey($projectId, $clientKey);
         if ($client === null) {
             throw new ApiError('not_found', 'Project or client not found', 404);
         }
+        $environment = $this->environmentFromRequest($projectId, $environmentKey);
 
-        return new ApiResponse(200, $this->resolvedPayload($projectId, $client['id']));
+        return new ApiResponse(200, $this->resolvedPayload($projectId, $client['id'], $environment, true));
     }
 
-    private function projectClientFlag(ApiPrincipal $principal, string $projectId, string $clientKey, string $flagKey): ApiResponse
+    private function projectClientFlag(ApiPrincipal $principal, string $projectId, string $clientKey, string $flagKey, ?string $environmentKey): ApiResponse
     {
-        $payload = $this->projectClientConfig($principal, $projectId, $clientKey)->payload();
+        $payload = $this->projectClientConfig($principal, $projectId, $clientKey, $environmentKey)->payload();
         if ($payload === null || !array_key_exists($flagKey, $payload['flags'])) {
             throw new ApiError('not_found', 'Flag not found', 404);
         }
 
-        return new ApiResponse(200, ['key' => $flagKey, 'value' => $payload['flags'][$flagKey]]);
+        return new ApiResponse(200, ['key' => $flagKey, ...$payload['flags'][$flagKey]]);
     }
 
-    private function resolvedPayload(string $projectId, string $clientId): array
+    private function projectEnvironmentSnapshot(ApiPrincipal $principal, string $projectId, string $environmentKey): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::RUNTIME_READ_ANY, $projectId);
+        $environment = $this->requireEnvironmentByKey($projectId, $environmentKey);
+
+        return new ApiResponse(200, $this->normalize($this->resolvedConfig->buildSnapshot($projectId, $environment)));
+    }
+
+    private function resolvedPayload(string $projectId, string $clientId, array $environment, bool $logEvents): array
     {
         $project = $this->requireProject($projectId);
         $client = $this->requireClient($projectId, $clientId);
@@ -597,7 +986,7 @@ final class NativeApplication
             throw new ApiError('unauthorized', 'Project or client is inactive', 401);
         }
 
-        $payload = $this->resolvedConfig->resolveProjectClient($projectId, $client);
+        $payload = $this->resolvedConfig->resolveProjectClient($projectId, $environment, $client, $logEvents);
         $payload['project']['slug'] = $project['slug'];
 
         return $this->normalize($payload);
@@ -611,6 +1000,36 @@ final class NativeApplication
         }
 
         return $project;
+    }
+
+    private function requireEnvironment(string $projectId, string $environmentId): array
+    {
+        $environment = $this->environments->find($projectId, $environmentId);
+        if ($environment === null) {
+            throw new ApiError('not_found', 'Environment not found', 404);
+        }
+
+        return $environment;
+    }
+
+    private function requireEnvironmentByKey(string $projectId, string $environmentKey): array
+    {
+        $environment = $this->environments->findByKey($projectId, $environmentKey);
+        if ($environment === null || $environment['status'] === 'deleted') {
+            throw new ApiError('not_found', 'Environment not found', 404);
+        }
+
+        return $environment;
+    }
+
+    private function requireSegment(string $projectId, string $segmentId): array
+    {
+        $segment = $this->segments->find($projectId, $segmentId);
+        if ($segment === null) {
+            throw new ApiError('not_found', 'Segment not found', 404);
+        }
+
+        return $segment;
     }
 
     private function requireFlag(string $projectId, string $flagId): array
@@ -750,11 +1169,14 @@ final class NativeApplication
         return $value === '' ? null : $value;
     }
 
-    private function assertResourceKey(string $value, string $field): void
+    private function resourceKey(array $payload, string $field): string
     {
+        $value = $this->requireString($payload, $field);
         if (!preg_match('/^[a-z0-9_-]+$/', $value)) {
             throw new ApiError('validation_failed', sprintf('%s must contain only lowercase letters, numbers, underscores, and dashes', $field), 422);
         }
+
+        return $value;
     }
 
     private function metadata(mixed $value): array
@@ -767,6 +1189,199 @@ final class NativeApplication
         }
 
         return $value;
+    }
+
+    private function conditions(mixed $value, string $field): array
+    {
+        if (!is_array($value)) {
+            throw new ApiError('validation_failed', sprintf('%s must be an array', $field), 422);
+        }
+
+        $normalized = [];
+        foreach ($value as $index => $condition) {
+            if (!is_array($condition)) {
+                throw new ApiError('validation_failed', sprintf('%s[%d] must be an object', $field, $index), 422);
+            }
+            $attribute = $this->requireConditionString($condition, 'attribute', $field, $index);
+            $operator = $this->requireConditionString($condition, 'operator', $field, $index);
+            $entry = [
+                'attribute' => $attribute,
+                'operator' => $operator,
+            ];
+            if (array_key_exists('value', $condition)) {
+                $entry['value'] = $condition['value'];
+            }
+            if (array_key_exists('values', $condition)) {
+                if (!is_array($condition['values'])) {
+                    throw new ApiError('validation_failed', sprintf('%s[%d].values must be an array', $field, $index), 422);
+                }
+                $entry['values'] = array_values($condition['values']);
+            }
+
+            $normalized[] = $entry;
+        }
+
+        return $normalized;
+    }
+
+    private function targetingRules(mixed $value, array $flag): array
+    {
+        if (!is_array($value)) {
+            throw new ApiError('validation_failed', 'rules must be an array', 422);
+        }
+
+        $normalized = [];
+        foreach ($value as $index => $rule) {
+            if (!is_array($rule)) {
+                throw new ApiError('validation_failed', sprintf('rules[%d] must be an object', $index), 422);
+            }
+
+            $entry = [
+                'name' => isset($rule['name']) && is_string($rule['name']) && trim($rule['name']) !== '' ? trim($rule['name']) : 'rule-' . ($index + 1),
+                'conditions' => $this->conditions($rule['conditions'] ?? [], sprintf('rules[%d].conditions', $index)),
+                'segment_keys' => $this->stringArray($rule['segment_keys'] ?? [], sprintf('rules[%d].segment_keys', $index)),
+                'bucketing_key' => isset($rule['bucketing_key']) && is_string($rule['bucketing_key']) ? trim($rule['bucketing_key']) : 'key',
+                'serve' => $this->serveDefinition($rule['serve'] ?? [], $flag, $index),
+            ];
+
+            if (array_key_exists('percentage', $rule)) {
+                $entry['percentage'] = $this->percentage($rule['percentage'], sprintf('rules[%d].percentage', $index));
+            }
+            if (array_key_exists('schedule', $rule)) {
+                $entry['schedule'] = $this->schedule($rule['schedule'], sprintf('rules[%d].schedule', $index));
+            }
+
+            $normalized[] = $entry;
+        }
+
+        return $normalized;
+    }
+
+    private function serveDefinition(mixed $value, array $flag, int $index): array
+    {
+        if (!is_array($value)) {
+            throw new ApiError('validation_failed', sprintf('rules[%d].serve must be an object', $index), 422);
+        }
+        if (!array_key_exists('value', $value) && !array_key_exists('variant_key', $value)) {
+            throw new ApiError('validation_failed', sprintf('rules[%d].serve requires value or variant_key', $index), 422);
+        }
+
+        $entry = [];
+        if (array_key_exists('variant_key', $value)) {
+            $variantKey = $this->nullableString($value['variant_key']);
+            if ($variantKey === null) {
+                throw new ApiError('validation_failed', sprintf('rules[%d].serve.variant_key must be a string', $index), 422);
+            }
+            $this->validator->validateVariants($flag['type'], $flag['options'], $flag['variants'], $variantKey);
+            $entry['variant_key'] = $variantKey;
+        }
+        if (array_key_exists('value', $value)) {
+            $this->validator->validateValue($flag['type'], $value['value'], $flag['options'], sprintf('rules[%d].serve.value', $index));
+            $entry['value'] = $value['value'];
+        }
+
+        return $entry;
+    }
+
+    private function schedule(mixed $value, string $field): array
+    {
+        if (!is_array($value)) {
+            throw new ApiError('validation_failed', sprintf('%s must be an object', $field), 422);
+        }
+
+        $normalized = [];
+        foreach (['start_at', 'end_at'] as $key) {
+            if (array_key_exists($key, $value)) {
+                $normalized[$key] = $this->requireString($value, $key);
+            }
+        }
+
+        return $normalized;
+    }
+
+    private function percentage(mixed $value, string $field): float
+    {
+        if (!is_numeric($value)) {
+            throw new ApiError('validation_failed', sprintf('%s must be numeric', $field), 422);
+        }
+        $float = (float) $value;
+        if ($float < 0 || $float > 100) {
+            throw new ApiError('validation_failed', sprintf('%s must be between 0 and 100', $field), 422);
+        }
+
+        return $float;
+    }
+
+    private function stringArray(mixed $value, string $field): array
+    {
+        if (!is_array($value)) {
+            throw new ApiError('validation_failed', sprintf('%s must be an array', $field), 422);
+        }
+
+        $normalized = [];
+        foreach ($value as $index => $entry) {
+            if (!is_string($entry) || trim($entry) === '') {
+                throw new ApiError('validation_failed', sprintf('%s[%d] must be a non-empty string', $field, $index), 422);
+            }
+            $normalized[] = trim($entry);
+        }
+
+        return $normalized;
+    }
+
+    private function requireConditionString(array $condition, string $field, string $parent, int $index): string
+    {
+        $value = $condition[$field] ?? null;
+        if (!is_string($value) || trim($value) === '') {
+            throw new ApiError('validation_failed', sprintf('%s[%d].%s is required', $parent, $index, $field), 422);
+        }
+
+        return trim($value);
+    }
+
+    private function boolValue(mixed $value): bool
+    {
+        if (!is_bool($value)) {
+            throw new ApiError('validation_failed', 'Value must be a boolean', 422);
+        }
+
+        return $value;
+    }
+
+    private function intValue(mixed $value, string $field, int $min, int $max): int
+    {
+        if (!is_int($value) && !(is_string($value) && preg_match('/^-?\d+$/', $value) === 1)) {
+            throw new ApiError('validation_failed', sprintf('%s must be an integer', $field), 422);
+        }
+        $int = (int) $value;
+        if ($int < $min || $int > $max) {
+            throw new ApiError('validation_failed', sprintf('%s must be between %d and %d', $field, $min, $max), 422);
+        }
+
+        return $int;
+    }
+
+    private function flagKind(mixed $value): string
+    {
+        if (!is_string($value) || !in_array($value, ['release', 'experiment', 'ops', 'permission'], true)) {
+            throw new ApiError('validation_failed', 'flag_kind must be release, experiment, ops, or permission', 422);
+        }
+
+        return $value;
+    }
+
+    private function environmentFromRequest(string $projectId, ?string $environmentKey): array
+    {
+        if ($environmentKey !== null && $environmentKey !== '') {
+            return $this->requireEnvironmentByKey($projectId, $environmentKey);
+        }
+
+        $environment = $this->resolvedConfig->defaultEnvironment($projectId);
+        if ($environment === null) {
+            throw new ApiError('not_found', 'No default environment exists for this project', 404);
+        }
+
+        return $environment;
     }
 
     private function normalize(array $payload): array
