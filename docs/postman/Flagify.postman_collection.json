@@ -1003,11 +1003,13 @@
               { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" }
             ],
             "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/evaluation-events?environment=production&limit=50&offset=0",
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/evaluation-events?environment=production&flag_id={{flag_id}}&client_id={{client_id}}&limit=50&offset=0",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "projects", "{{project_id}}", "evaluation-events"],
               "query": [
                 { "key": "environment", "value": "production" },
+                { "key": "flag_id", "value": "{{flag_id}}" },
+                { "key": "client_id", "value": "{{client_id}}" },
                 { "key": "limit", "value": "50" },
                 { "key": "offset", "value": "0" }
               ]
@@ -1022,7 +1024,24 @@
       "item": [
         {
           "name": "Create Identity",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set('identity_id', data.id);",
+                  "  pm.environment.set('identity_kind', data.kind);",
+                  "  pm.environment.set('identity_identifier', data.identifier);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
+            "description": "Create an identity with initial traits.",
             "method": "POST",
             "header": [
               { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
@@ -1040,8 +1059,133 @@
           }
         },
         {
+          "name": "List Identities",
+          "request": {
+            "description": "List identities.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/identities?limit=50&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "identities"],
+              "query": [
+                { "key": "limit", "value": "50" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Identity",
+          "request": {
+            "description": "Get one identity by id.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/identities/{{identity_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "identities", "{{identity_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Identity",
+          "request": {
+            "description": "Update identity metadata or status.",
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"display_name\": \"Primary User Updated\",\n  \"description\": \"Updated identity description\",\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/identities/{{identity_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "identities", "{{identity_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Identity",
+          "request": {
+            "description": "Soft delete an identity.",
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/identities/{{identity_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "identities", "{{identity_id}}"]
+            }
+          }
+        },
+        {
+          "name": "List Identity Traits",
+          "request": {
+            "description": "List persisted traits for one identity.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/identities/{{identity_id}}/traits",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "identities", "{{identity_id}}", "traits"]
+            }
+          }
+        },
+        {
+          "name": "Patch Identity Traits",
+          "request": {
+            "description": "Bulk set and unset identity traits.",
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"set\": {\n    \"plan\": \"enterprise\",\n    \"beta\": true\n  },\n  \"unset\": [\"country\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/identities/{{identity_id}}/traits",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "identities", "{{identity_id}}", "traits"]
+            }
+          }
+        },
+        {
+          "name": "Put Identity Trait",
+          "request": {
+            "description": "Upsert a single identity trait.",
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"value\": \"enterprise\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/identities/{{identity_id}}/traits/plan",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "identities", "{{identity_id}}", "traits", "plan"]
+            }
+          }
+        },
+        {
           "name": "Evaluate Identity",
           "request": {
+            "description": "Evaluate all or selected flags for an identity with transient traits.",
             "method": "POST",
             "header": [
               { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" },
@@ -1049,12 +1193,52 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"kind\": \"user\",\n  \"identifier\": \"user_123\",\n  \"transient_traits\": {\n    \"plan\": \"enterprise\"\n  }\n}"
+              "raw": "{\n  \"kind\": \"{{identity_kind}}\",\n  \"identifier\": \"{{identity_identifier}}\",\n  \"transient_traits\": {\n    \"plan\": \"enterprise\"\n  },\n  \"flag_keys\": [\"{{flag_key}}\"]\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/runtime/projects/{{project_id}}/environments/production/identities/evaluate",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "runtime", "projects", "{{project_id}}", "environments", "production", "identities", "evaluate"]
+            }
+          }
+        },
+        {
+          "name": "Resolve Identity Config",
+          "request": {
+            "description": "Resolve config for a specific identity.",
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transient_traits\": {\n    \"plan\": \"enterprise\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/runtime/projects/{{project_id}}/environments/production/identities/{{identity_kind}}/{{identity_identifier}}/config",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "runtime", "projects", "{{project_id}}", "environments", "production", "identities", "{{identity_kind}}", "{{identity_identifier}}", "config"]
+            }
+          }
+        },
+        {
+          "name": "Resolve Identity Flag",
+          "request": {
+            "description": "Resolve one flag for a specific identity.",
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transient_traits\": {\n    \"plan\": \"enterprise\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/runtime/projects/{{project_id}}/environments/production/identities/{{identity_kind}}/{{identity_identifier}}/config/{{flag_key}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "runtime", "projects", "{{project_id}}", "environments", "production", "identities", "{{identity_kind}}", "{{identity_identifier}}", "config", "{{flag_key}}"]
             }
           }
         }
@@ -1067,15 +1251,346 @@
         {
           "name": "List Audit Logs",
           "request": {
+            "description": "List audit logs with optional filters.",
             "method": "GET",
             "header": [
               { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" }
             ],
             "url": {
-              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/audit-logs?limit=50&offset=0",
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/audit-logs?environment=production&limit=50&offset=0",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "projects", "{{project_id}}", "audit-logs"],
               "query": [
+                { "key": "environment", "value": "production" },
+                { "key": "limit", "value": "50" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Analytics By Flag",
+          "request": {
+            "description": "Aggregate evaluations by flag.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/analytics/evaluations/by-flag?environment=production&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "analytics", "evaluations", "by-flag"],
+              "query": [
+                { "key": "environment", "value": "production" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Analytics By Variant",
+          "request": {
+            "description": "Aggregate evaluations by variant.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/analytics/evaluations/by-variant?environment=production&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "analytics", "evaluations", "by-variant"],
+              "query": [
+                { "key": "environment", "value": "production" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Analytics By Environment",
+          "request": {
+            "description": "Aggregate evaluations by environment.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/analytics/evaluations/by-environment?limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "analytics", "evaluations", "by-environment"],
+              "query": [
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Analytics Recent Activity",
+          "request": {
+            "description": "List recent evaluation activity.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/analytics/recent-activity?limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "analytics", "recent-activity"],
+              "query": [
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Change Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  pm.environment.set('change_request_id', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "description": "Create a change request for protected flag config changes.",
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"flag_id\": \"{{flag_id}}\",\n  \"environment_key\": \"production\",\n  \"title\": \"Promote premium rollout\",\n  \"description\": \"Increase premium rollout in production\",\n  \"base_snapshot_checksum\": \"{{snapshot_checksum}}\",\n  \"desired_config\": {\n    \"default_variant_key\": \"control\",\n    \"rules\": [\n      {\n        \"name\": \"Premium rollout\",\n        \"segment_keys\": [\"{{segment_key}}\"],\n        \"conditions\": [],\n        \"percentage\": 75,\n        \"bucketing_key\": \"key\",\n        \"serve\": {\n          \"variant_key\": \"variant_a\"\n        }\n      }\n    ]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/change-requests",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "change-requests"]
+            }
+          }
+        },
+        {
+          "name": "List Change Requests",
+          "request": {
+            "description": "List change requests.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/change-requests?limit=50&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "change-requests"],
+              "query": [
+                { "key": "limit", "value": "50" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Change Request",
+          "request": {
+            "description": "Get one change request by id.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/change-requests/{{change_request_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "change-requests", "{{change_request_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Review Change Request",
+          "request": {
+            "description": "Approve or reject a pending change request.",
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"approve\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/change-requests/{{change_request_id}}/review",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "change-requests", "{{change_request_id}}", "review"]
+            }
+          }
+        },
+        {
+          "name": "Apply Change Request",
+          "request": {
+            "description": "Apply an approved change request.",
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/change-requests/{{change_request_id}}/apply",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "change-requests", "{{change_request_id}}", "apply"]
+            }
+          }
+        },
+        {
+          "name": "Export Project Config",
+          "request": {
+            "description": "Export deterministic project configuration.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/export",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "export"]
+            }
+          }
+        },
+        {
+          "name": "Import Project Config Dry Run",
+          "request": {
+            "description": "Preview an import plan without applying changes.",
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"export_version\": \"2026-03-23.v1\",\n  \"project\": {\n    \"slug\": \"{{project_slug}}\"\n  },\n  \"environments\": [\n    {\n      \"key\": \"qa\",\n      \"name\": \"QA\",\n      \"description\": \"Quality assurance environment\",\n      \"sort_order\": 25\n    }\n  ],\n  \"segments\": [\n    {\n      \"key\": \"{{segment_key}}\",\n      \"name\": \"Premium Users\",\n      \"rules\": [\n        {\n          \"attribute\": \"metadata.plan\",\n          \"operator\": \"equals\",\n          \"value\": \"premium\"\n        }\n      ]\n    }\n  ],\n  \"flags\": [\n    {\n      \"key\": \"{{flag_key}}\",\n      \"name\": \"New Dashboard\",\n      \"flag_kind\": \"experiment\",\n      \"type\": \"select\",\n      \"default_value\": \"control\",\n      \"options\": [\"control\", \"variant_a\"],\n      \"default_variant_key\": \"control\"\n    }\n  ],\n  \"flag_environment_configs\": [\n    {\n      \"flag_key\": \"{{flag_key}}\",\n      \"environment_key\": \"production\",\n      \"default_value\": \"control\",\n      \"default_variant_key\": \"control\",\n      \"rules\": []\n    }\n  ],\n  \"prerequisites\": [],\n  \"variants\": [\n    {\n      \"flag_key\": \"{{flag_key}}\",\n      \"variants\": [\n        {\n          \"key\": \"control\",\n          \"name\": \"Control\",\n          \"value\": \"control\"\n        },\n        {\n          \"key\": \"variant_a\",\n          \"name\": \"Variant A\",\n          \"value\": \"variant_a\"\n        }\n      ]\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/import?dry_run=true&replace=false",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "import"],
+              "query": [
+                { "key": "dry_run", "value": "true" },
+                { "key": "replace", "value": "false" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Import Project Config Apply",
+          "request": {
+            "description": "Apply an import plan and replace conflicting resources.",
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"export_version\": \"2026-03-23.v1\",\n  \"project\": {\n    \"slug\": \"{{project_slug}}\"\n  },\n  \"environments\": [],\n  \"segments\": [],\n  \"flags\": [],\n  \"flag_environment_configs\": [],\n  \"prerequisites\": [],\n  \"variants\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/import?dry_run=false&replace=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "import"],
+              "query": [
+                { "key": "dry_run", "value": "false" },
+                { "key": "replace", "value": "true" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Code References",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.items && data.items.length > 0) pm.environment.set('code_reference_id', data.items[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "description": "Ingest code references for flags.",
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"references\": [\n    {\n      \"flag_key\": \"{{flag_key}}\",\n      \"source_type\": \"repo_scan\",\n      \"source_name\": \"flagify-web\",\n      \"reference_path\": \"src/pages/dashboard.tsx\",\n      \"reference_line\": 42,\n      \"reference_context\": \"if (flags.{{flag_key}}.value === \\\"variant_a\\\")\",\n      \"observed_at\": \"2026-03-23 12:00:00\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/code-references",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "code-references"]
+            }
+          }
+        },
+        {
+          "name": "List Code References",
+          "request": {
+            "description": "List ingested code references.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/code-references?limit=50&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "code-references"],
+              "query": [
+                { "key": "limit", "value": "50" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Code Reference",
+          "request": {
+            "description": "Delete one code reference.",
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/code-references/{{code_reference_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "code-references", "{{code_reference_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Flag Stale Report",
+          "request": {
+            "description": "Report likely stale flags.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/flags/stale-report?evaluated_before=2026-02-01%2000:00:00&has_code_references=false&limit=50&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "flags", "stale-report"],
+              "query": [
+                { "key": "evaluated_before", "value": "2026-02-01 00:00:00" },
+                { "key": "has_code_references", "value": "false" },
                 { "key": "limit", "value": "50" },
                 { "key": "offset", "value": "0" }
               ]
@@ -1085,6 +1600,7 @@
         {
           "name": "Fetch Snapshot With ETag",
           "request": {
+            "description": "Re-fetch a snapshot using If-None-Match.",
             "method": "GET",
             "header": [
               { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" },
