@@ -1,8 +1,8 @@
 {
   "info": {
-    "_postman_id": "7d0c1bb4-3b2b-48c9-bf40-flagify-collection-v2",
+    "_postman_id": "7d0c1bb4-3b2b-48c9-bf40-flagify-collection-v3",
     "name": "Flagify API",
-    "description": "Postman collection for the Flagify admin, runtime, and snapshot API.",
+    "description": "Postman collection for the full Flagify admin, runtime, analytics, import/export, and snapshot API surface.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -67,6 +67,56 @@
                 { "key": "limit", "value": "50" },
                 { "key": "offset", "value": "0" }
               ]
+            }
+          }
+        },
+        {
+          "name": "Get Project",
+          "request": {
+            "description": "Get one project by id.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Project",
+          "request": {
+            "description": "Update project metadata.",
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{root_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Example Updated\",\n  \"description\": \"Updated project description\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Project",
+          "request": {
+            "description": "Soft delete a project.",
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{root_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}"]
             }
           }
         }
@@ -180,6 +230,56 @@
               "path": ["api", "v1", "keys"]
             }
           }
+        },
+        {
+          "name": "List Keys",
+          "request": {
+            "description": "List keys, optionally filtered by project.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{root_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/keys?project_id={{project_id}}&limit=50&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "keys"],
+              "query": [
+                { "key": "project_id", "value": "{{project_id}}" },
+                { "key": "limit", "value": "50" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Project Admin Key",
+          "request": {
+            "description": "Get one key by id.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/keys/{{project_admin_key_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "keys", "{{project_admin_key_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Revoke Project Read Key",
+          "request": {
+            "description": "Revoke a key.",
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/keys/{{project_read_key_id}}/revoke",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "keys", "{{project_read_key_id}}", "revoke"]
+            }
+          }
         }
       ]
     },
@@ -234,6 +334,76 @@
               "raw": "{{base_url}}/api/v1/projects/{{project_id}}/environments",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "projects", "{{project_id}}", "environments"]
+            }
+          }
+        },
+        {
+          "name": "Get Environment",
+          "request": {
+            "description": "Get one environment by id.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/environments/{{environment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "environments", "{{environment_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Environment",
+          "request": {
+            "description": "Update environment metadata and change-request protection.",
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"QA Updated\",\n  \"description\": \"Updated QA environment\",\n  \"requires_change_requests\": false,\n  \"sort_order\": 30\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/environments/{{environment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "environments", "{{environment_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Protect Production Environment",
+          "request": {
+            "description": "Mark production as requiring change requests.",
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requires_change_requests\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/environments/production",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "environments", "production"]
+            }
+          }
+        },
+        {
+          "name": "Delete Environment",
+          "request": {
+            "description": "Delete an environment.",
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/environments/{{environment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "environments", "{{environment_id}}"]
             }
           }
         }
@@ -292,6 +462,56 @@
               "path": ["api", "v1", "projects", "{{project_id}}", "segments"]
             }
           }
+        },
+        {
+          "name": "Get Segment",
+          "request": {
+            "description": "Get one segment by id.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/segments/{{segment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "segments", "{{segment_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Segment",
+          "request": {
+            "description": "Update segment rules.",
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Premium US Users\",\n  \"rules\": [\n    {\n      \"attribute\": \"metadata.plan\",\n      \"operator\": \"equals\",\n      \"value\": \"premium\"\n    },\n    {\n      \"attribute\": \"metadata.country\",\n      \"operator\": \"equals\",\n      \"value\": \"US\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/segments/{{segment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "segments", "{{segment_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Segment",
+          "request": {
+            "description": "Delete a segment.",
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/segments/{{segment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "segments", "{{segment_id}}"]
+            }
+          }
         }
       ]
     },
@@ -331,6 +551,125 @@
               "raw": "{{base_url}}/api/v1/projects/{{project_id}}/clients",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "projects", "{{project_id}}", "clients"]
+            }
+          }
+        },
+        {
+          "name": "List Clients",
+          "request": {
+            "description": "List clients.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/clients?limit=50&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "clients"],
+              "query": [
+                { "key": "limit", "value": "50" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Client",
+          "request": {
+            "description": "Get one client by id.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/clients/{{client_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "clients", "{{client_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Client",
+          "request": {
+            "description": "Update client metadata or status.",
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Acme Incorporated\",\n  \"description\": \"Updated customer account\",\n  \"metadata\": {\n    \"plan\": \"enterprise\",\n    \"country\": \"US\",\n    \"app_version\": \"2.5.0\"\n  },\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/clients/{{client_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "clients", "{{client_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Client",
+          "request": {
+            "description": "Soft delete a client.",
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/clients/{{client_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "clients", "{{client_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Put Client Override",
+          "request": {
+            "description": "Create or replace a client-specific flag override.",
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"value\": \"variant_a\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/clients/{{client_id}}/flags/{{flag_id}}/override",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "clients", "{{client_id}}", "flags", "{{flag_id}}", "override"]
+            }
+          }
+        },
+        {
+          "name": "List Client Overrides",
+          "request": {
+            "description": "List overrides for one client.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/clients/{{client_id}}/overrides",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "clients", "{{client_id}}", "overrides"]
+            }
+          }
+        },
+        {
+          "name": "Delete Client Override",
+          "request": {
+            "description": "Delete a client override.",
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/clients/{{client_id}}/flags/{{flag_id}}/override",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "clients", "{{client_id}}", "flags", "{{flag_id}}", "override"]
             }
           }
         }
@@ -376,6 +715,21 @@
           }
         },
         {
+          "name": "Get Production Flag Config",
+          "request": {
+            "description": "Get environment-specific flag config.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/flags/{{flag_id}}/environments/production",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "flags", "{{flag_id}}", "environments", "production"]
+            }
+          }
+        },
+        {
           "name": "Configure Production Rules",
           "request": {
             "description": "Set production-specific rules for the flag. This example serves variant_a to 50% of the premium_users segment using sticky bucketing on client key.",
@@ -407,6 +761,71 @@
               "raw": "{{base_url}}/api/v1/projects/{{project_id}}/flags",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "projects", "{{project_id}}", "flags"]
+            }
+          }
+        },
+        {
+          "name": "Get Flag",
+          "request": {
+            "description": "Get one flag by id.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/flags/{{flag_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "flags", "{{flag_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Flag",
+          "request": {
+            "description": "Update a flag definition.",
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Dashboard Rollout\",\n  \"description\": \"Updated experiment description\",\n  \"stale_status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/flags/{{flag_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "flags", "{{flag_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Production Flag Config",
+          "request": {
+            "description": "Reset environment config to inherited defaults.",
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/flags/{{flag_id}}/environments/production",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "flags", "{{flag_id}}", "environments", "production"]
+            }
+          }
+        },
+        {
+          "name": "Delete Flag",
+          "request": {
+            "description": "Delete or archive a flag.",
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/flags/{{flag_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "flags", "{{flag_id}}"]
             }
           }
         }
