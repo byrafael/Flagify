@@ -81,6 +81,15 @@ class FlagEnvironmentRepository extends AbstractRepository
         return $row ? $this->decodeJsonFields($row, ['default_value', 'rules']) : null;
     }
 
+    public function findById(string $id): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM flag_environment_configs WHERE id = :id LIMIT 1');
+        $stmt->execute(['id' => $id]);
+        $row = $stmt->fetch();
+
+        return $row ? $this->decodeJsonFields($row, ['default_value', 'rules']) : null;
+    }
+
     public function forFlag(string $flagId): array
     {
         $stmt = $this->pdo->prepare('SELECT * FROM flag_environment_configs WHERE flag_id = :flag_id ORDER BY created_at ASC');

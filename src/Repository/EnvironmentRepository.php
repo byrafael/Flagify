@@ -44,6 +44,7 @@ class EnvironmentRepository extends AbstractRepository
             'name' => $data['name'],
             'description' => $data['description'] ?? null,
             'is_default' => ($data['is_default'] ?? false) ? 1 : 0,
+            'requires_change_requests' => ($data['requires_change_requests'] ?? false) ? 1 : 0,
             'sort_order' => $data['sort_order'] ?? 100,
             'status' => $data['status'] ?? 'active',
             'created_at' => $this->clock->now(),
@@ -52,8 +53,8 @@ class EnvironmentRepository extends AbstractRepository
         ];
 
         $stmt = $this->pdo->prepare(
-            'INSERT INTO environments (id, project_id, `key`, name, description, is_default, sort_order, status, created_at, updated_at, deleted_at)
-             VALUES (:id, :project_id, :key, :name, :description, :is_default, :sort_order, :status, :created_at, :updated_at, :deleted_at)'
+            'INSERT INTO environments (id, project_id, `key`, name, description, is_default, requires_change_requests, sort_order, status, created_at, updated_at, deleted_at)
+             VALUES (:id, :project_id, :key, :name, :description, :is_default, :requires_change_requests, :sort_order, :status, :created_at, :updated_at, :deleted_at)'
         );
         $stmt->execute($environment);
 
@@ -146,6 +147,10 @@ class EnvironmentRepository extends AbstractRepository
         if (array_key_exists('is_default', $data)) {
             $fields[] = 'is_default = :is_default';
             $params['is_default'] = $data['is_default'] ? 1 : 0;
+        }
+        if (array_key_exists('requires_change_requests', $data)) {
+            $fields[] = 'requires_change_requests = :requires_change_requests';
+            $params['requires_change_requests'] = $data['requires_change_requests'] ? 1 : 0;
         }
         if (($data['status'] ?? null) === 'deleted' && !array_key_exists('deleted_at', $data)) {
             $data['deleted_at'] = $this->clock->now();

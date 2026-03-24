@@ -23,26 +23,43 @@ class EvaluationEventRepository extends AbstractRepository
             'project_id' => $data['project_id'],
             'environment_id' => $data['environment_id'],
             'flag_id' => $data['flag_id'],
-            'client_id' => $data['client_id'],
+            'client_id' => $data['client_id'] ?? null,
+            'identity_id' => $data['identity_id'] ?? null,
+            'identity_kind' => $data['identity_kind'] ?? null,
+            'identity_identifier' => $data['identity_identifier'] ?? null,
             'variant_key' => $data['variant_key'] ?? null,
             'value' => $data['value'],
             'reason' => $data['reason'],
             'matched_rule' => $data['matched_rule'] ?? null,
             'context' => $data['context'],
-            'created_at' => $this->clock->now(),
+            'traits' => $data['traits'] ?? null,
+            'transient_traits' => $data['transient_traits'] ?? null,
+            'created_at' => $data['created_at'] ?? $this->clock->now(),
         ];
 
         $stmt = $this->pdo->prepare(
-            'INSERT INTO evaluation_events (id, project_id, environment_id, flag_id, client_id, variant_key, value, reason, matched_rule, context, created_at)
-             VALUES (:id, :project_id, :environment_id, :flag_id, :client_id, :variant_key, :value, :reason, :matched_rule, :context, :created_at)'
+            'INSERT INTO evaluation_events (id, project_id, environment_id, flag_id, client_id, identity_id, identity_kind, identity_identifier, variant_key, value, reason, matched_rule, context, traits, transient_traits, created_at)
+             VALUES (:id, :project_id, :environment_id, :flag_id, :client_id, :identity_id, :identity_kind, :identity_identifier, :variant_key, :value, :reason, :matched_rule, :context, :traits, :transient_traits, :created_at)'
         );
         $stmt->execute([
             ...$event,
             'value' => Json::encode($event['value']),
             'context' => Json::encode($event['context']),
+            'traits' => $event['traits'] === null ? null : Json::encode($event['traits']),
+            'transient_traits' => $event['transient_traits'] === null ? null : Json::encode($event['transient_traits']),
         ]);
 
         return $event;
+    }
+
+    public function createBatch(array $events): array
+    {
+        $created = [];
+        foreach ($events as $event) {
+            $created[] = $this->create($event);
+        }
+
+        return $created;
     }
 
     public function paginateByProject(string $projectId, int $limit, int $offset, ?string $environmentId = null, ?string $flagId = null, ?string $clientId = null): array
@@ -71,7 +88,7 @@ class EvaluationEventRepository extends AbstractRepository
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
 
-        return array_map(fn (array $row) => $this->decodeJsonFields($row, ['value', 'context']), $stmt->fetchAll());
+        return array_map(fn (array $row) => $this->decodeJsonFields($row, ['value', 'context', 'traits', 'transient_traits']), $stmt->fetchAll());
     }
 
     public function countByProject(string $projectId, ?string $environmentId = null, ?string $flagId = null, ?string $clientId = null): int

@@ -10,15 +10,26 @@ use Flagify\Auth\ApiPrincipal;
 use Flagify\Auth\ScopeAuthorizer;
 use Flagify\Domain\KeyKind;
 use Flagify\Repository\ApiKeyRepository;
+use Flagify\Repository\AuditLogRepository;
 use Flagify\Repository\ClientRepository;
+use Flagify\Repository\CodeReferenceRepository;
+use Flagify\Repository\ChangeRequestRepository;
 use Flagify\Repository\EnvironmentRepository;
 use Flagify\Repository\EvaluationEventRepository;
 use Flagify\Repository\FlagEnvironmentRepository;
 use Flagify\Repository\FlagRepository;
+use Flagify\Repository\IdentityRepository;
+use Flagify\Repository\IdentityTraitRepository;
 use Flagify\Repository\OverrideRepository;
 use Flagify\Repository\ProjectRepository;
 use Flagify\Repository\SegmentRepository;
+use Flagify\Service\AnalyticsService;
+use Flagify\Service\AuditLogService;
+use Flagify\Service\ChangeRequestService;
+use Flagify\Service\CodeReferenceService;
 use Flagify\Service\FlagValueValidator;
+use Flagify\Service\IdentityService;
+use Flagify\Service\ImportExportService;
 use Flagify\Service\ResolvedConfigService;
 use Flagify\Support\ApiError;
 use Flagify\Support\ApiResponse;
@@ -42,7 +53,18 @@ final class NativeApplication
         private readonly EvaluationEventRepository $events,
         private readonly ApiKeyRepository $apiKeys,
         private readonly FlagValueValidator $validator,
-        private readonly ResolvedConfigService $resolvedConfig
+        private readonly ResolvedConfigService $resolvedConfig,
+        private readonly IdentityRepository $identities,
+        private readonly IdentityTraitRepository $identityTraits,
+        private readonly AuditLogRepository $auditLogs,
+        private readonly ChangeRequestRepository $changeRequests,
+        private readonly CodeReferenceRepository $codeReferences,
+        private readonly AnalyticsService $analytics,
+        private readonly IdentityService $identityService,
+        private readonly AuditLogService $auditLogService,
+        private readonly ChangeRequestService $changeRequestService,
+        private readonly ImportExportService $importExportService,
+        private readonly CodeReferenceService $codeReferenceService
     ) {
     }
 
@@ -182,6 +204,81 @@ final class NativeApplication
         if (preg_match('#^/api/v1/projects/([^/]+)/clients/([^/]+)/overrides$#', $path, $m) === 1 && $method === 'GET') {
             return $this->listOverrides($principal, $m[1], $m[2]);
         }
+        if (preg_match('#^/api/v1/projects/([^/]+)/identities$#', $path, $m) === 1) {
+            return match ($method) {
+                'POST' => $this->createIdentity($principal, $m[1]),
+                'GET' => $this->listIdentities($principal, $m[1]),
+                default => throw new ApiError('not_found', 'Route not found', 404),
+            };
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/identities/([^/]+)$#', $path, $m) === 1) {
+            return match ($method) {
+                'GET' => $this->showIdentity($principal, $m[1], $m[2]),
+                'PATCH' => $this->updateIdentity($principal, $m[1], $m[2]),
+                'DELETE' => $this->deleteIdentity($principal, $m[1], $m[2]),
+                default => throw new ApiError('not_found', 'Route not found', 404),
+            };
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/identities/([^/]+)/traits$#', $path, $m) === 1) {
+            return match ($method) {
+                'GET' => $this->listIdentityTraits($principal, $m[1], $m[2]),
+                'PATCH' => $this->patchIdentityTraits($principal, $m[1], $m[2]),
+                default => throw new ApiError('not_found', 'Route not found', 404),
+            };
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/identities/([^/]+)/traits/([^/]+)$#', $path, $m) === 1 && $method === 'PUT') {
+            return $this->putIdentityTrait($principal, $m[1], $m[2], $m[3]);
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/audit-logs$#', $path, $m) === 1 && $method === 'GET') {
+            return $this->listAuditLogs($principal, $m[1]);
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/analytics/evaluations/by-flag$#', $path, $m) === 1 && $method === 'GET') {
+            return $this->analyticsByFlag($principal, $m[1]);
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/analytics/evaluations/by-variant$#', $path, $m) === 1 && $method === 'GET') {
+            return $this->analyticsByVariant($principal, $m[1]);
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/analytics/evaluations/by-environment$#', $path, $m) === 1 && $method === 'GET') {
+            return $this->analyticsByEnvironment($principal, $m[1]);
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/analytics/recent-activity$#', $path, $m) === 1 && $method === 'GET') {
+            return $this->analyticsRecentActivity($principal, $m[1]);
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/change-requests$#', $path, $m) === 1) {
+            return match ($method) {
+                'POST' => $this->createChangeRequest($principal, $m[1]),
+                'GET' => $this->listChangeRequests($principal, $m[1]),
+                default => throw new ApiError('not_found', 'Route not found', 404),
+            };
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/change-requests/([^/]+)$#', $path, $m) === 1 && $method === 'GET') {
+            return $this->showChangeRequest($principal, $m[1], $m[2]);
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/change-requests/([^/]+)/review$#', $path, $m) === 1 && $method === 'POST') {
+            return $this->reviewChangeRequest($principal, $m[1], $m[2]);
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/change-requests/([^/]+)/apply$#', $path, $m) === 1 && $method === 'POST') {
+            return $this->applyChangeRequest($principal, $m[1], $m[2]);
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/export$#', $path, $m) === 1 && $method === 'GET') {
+            return $this->exportProjectConfig($principal, $m[1]);
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/import$#', $path, $m) === 1 && $method === 'POST') {
+            return $this->importProjectConfig($principal, $m[1]);
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/code-references$#', $path, $m) === 1) {
+            return match ($method) {
+                'POST' => $this->createCodeReferences($principal, $m[1]),
+                'GET' => $this->listCodeReferences($principal, $m[1]),
+                default => throw new ApiError('not_found', 'Route not found', 404),
+            };
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/code-references/([^/]+)$#', $path, $m) === 1 && $method === 'DELETE') {
+            return $this->deleteCodeReference($principal, $m[1], $m[2]);
+        }
+        if (preg_match('#^/api/v1/projects/([^/]+)/flags/stale-report$#', $path, $m) === 1 && $method === 'GET') {
+            return $this->staleFlagReport($principal, $m[1]);
+        }
         if (preg_match('#^/api/v1/projects/([^/]+)/evaluation-events$#', $path, $m) === 1 && $method === 'GET') {
             return $this->listEvaluationEvents($principal, $m[1]);
         }
@@ -215,8 +312,20 @@ final class NativeApplication
         if (preg_match('#^/api/v1/runtime/projects/([^/]+)/environments/([^/]+)/clients/([^/]+)/config/([^/]+)$#', $path, $m) === 1 && $method === 'GET') {
             return $this->projectClientFlag($principal, $m[1], $m[3], $m[4], $m[2]);
         }
+        if (preg_match('#^/api/v1/runtime/projects/([^/]+)/environments/([^/]+)/identities/evaluate$#', $path, $m) === 1 && $method === 'POST') {
+            return $this->evaluateIdentity($principal, $m[1], $m[2]);
+        }
+        if (preg_match('#^/api/v1/runtime/projects/([^/]+)/environments/([^/]+)/identities/([^/]+)/([^/]+)/config$#', $path, $m) === 1 && $method === 'POST') {
+            return $this->projectIdentityConfig($principal, $m[1], $m[2], $m[3], $m[4]);
+        }
+        if (preg_match('#^/api/v1/runtime/projects/([^/]+)/environments/([^/]+)/identities/([^/]+)/([^/]+)/config/([^/]+)$#', $path, $m) === 1 && $method === 'POST') {
+            return $this->projectIdentityFlag($principal, $m[1], $m[2], $m[3], $m[4], $m[5]);
+        }
         if (preg_match('#^/api/v1/runtime/projects/([^/]+)/environments/([^/]+)/snapshot$#', $path, $m) === 1 && $method === 'GET') {
             return $this->projectEnvironmentSnapshot($principal, $m[1], $m[2]);
+        }
+        if (preg_match('#^/api/v1/runtime/projects/([^/]+)/evaluation-events:batch$#', $path, $m) === 1 && $method === 'POST') {
+            return $this->batchEvaluationEvents($principal, $m[1]);
         }
 
         throw new ApiError('not_found', 'Route not found', 404);
@@ -232,6 +341,7 @@ final class NativeApplication
             'description' => $this->nullableString($payload['description'] ?? null),
         ]);
         $this->environments->createDefaultsForProject($project['id']);
+        $this->audit($principal, 'project', $project['id'], $project['slug'], 'created', null, $project, $project['id']);
 
         return new ApiResponse(201, $this->normalize($project));
     }
@@ -286,14 +396,18 @@ final class NativeApplication
             $updates['description'] = $this->nullableString($payload['description']);
         }
 
-        return new ApiResponse(200, $this->normalize($this->projects->update($projectId, $updates)));
+        $updated = $this->projects->update($projectId, $updates);
+        $this->audit($principal, 'project', $projectId, $updated['slug'] ?? null, 'updated', $project, $updated, $projectId);
+
+        return new ApiResponse(200, $this->normalize($updated));
     }
 
     private function deleteProject(ApiPrincipal $principal, string $projectId): ApiResponse
     {
         $this->requireRoot($principal);
-        $this->requireProject($projectId);
+        $project = $this->requireProject($projectId);
         $this->projects->softDelete($projectId);
+        $this->audit($principal, 'project', $projectId, $project['slug'] ?? null, 'deleted', $project, ['id' => $projectId, 'status' => 'deleted'], $projectId);
 
         return new ApiResponse(204, null);
     }
@@ -316,12 +430,14 @@ final class NativeApplication
             'name' => $this->requireString($payload, 'name'),
             'description' => $this->nullableString($payload['description'] ?? null),
             'is_default' => $this->boolValue($payload['is_default'] ?? false),
+            'requires_change_requests' => $this->boolBody($payload, 'requires_change_requests', false),
             'sort_order' => $this->intValue($payload['sort_order'] ?? 100, 'sort_order', 0, 10000),
         ]);
 
         foreach ($this->flags->activeByProject($projectId) as $flag) {
             $this->flagEnvironments->createDefaultForFlag($flag['id'], $environment['id'], $flag['default_value'], $flag['default_variant_key'] ?? null);
         }
+        $this->audit($principal, 'environment', $environment['id'], $environment['key'], 'created', null, $environment, $projectId, $environment['id']);
 
         return new ApiResponse(201, $this->normalize($environment));
     }
@@ -372,8 +488,14 @@ final class NativeApplication
         if (array_key_exists('is_default', $payload)) {
             $updates['is_default'] = $this->boolValue($payload['is_default']);
         }
+        if (array_key_exists('requires_change_requests', $payload)) {
+            $updates['requires_change_requests'] = $this->boolValue($payload['requires_change_requests']);
+        }
 
-        return new ApiResponse(200, $this->normalize($this->environments->update($projectId, $environmentId, $updates)));
+        $updated = $this->environments->update($projectId, $environmentId, $updates);
+        $this->audit($principal, 'environment', $environmentId, $updated['key'] ?? null, 'updated', $environment, $updated, $projectId, $environmentId);
+
+        return new ApiResponse(200, $this->normalize($updated));
     }
 
     private function deleteEnvironment(ApiPrincipal $principal, string $projectId, string $environmentId): ApiResponse
@@ -385,6 +507,7 @@ final class NativeApplication
         }
 
         $this->environments->softDelete($projectId, $environmentId);
+        $this->audit($principal, 'environment', $environmentId, $environment['key'] ?? null, 'deleted', $environment, ['id' => $environmentId, 'status' => 'deleted'], $projectId, $environmentId);
 
         return new ApiResponse(204, null);
     }
@@ -407,6 +530,8 @@ final class NativeApplication
             'description' => $this->nullableString($payload['description'] ?? null),
             'rules' => $this->conditions($payload['rules'], 'rules'),
         ]);
+
+        $this->audit($principal, 'segment', $segment['id'], $segment['key'], 'created', null, $segment, $projectId);
 
         return new ApiResponse(201, $this->normalize($segment));
     }
@@ -453,15 +578,20 @@ final class NativeApplication
             $updates['rules'] = $this->conditions($payload['rules'], 'rules');
         }
 
-        return new ApiResponse(200, $this->normalize($this->segments->update($projectId, $segmentId, $updates)));
+        $before = $this->requireSegment($projectId, $segmentId);
+        $updated = $this->segments->update($projectId, $segmentId, $updates);
+        $this->audit($principal, 'segment', $segmentId, $updated['key'] ?? null, 'updated', $before, $updated, $projectId);
+
+        return new ApiResponse(200, $this->normalize($updated));
     }
 
     private function deleteSegment(ApiPrincipal $principal, string $projectId, string $segmentId): ApiResponse
     {
         $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
         $this->assertProjectActive($projectId);
-        $this->requireSegment($projectId, $segmentId);
+        $segment = $this->requireSegment($projectId, $segmentId);
         $this->segments->softDelete($projectId, $segmentId);
+        $this->audit($principal, 'segment', $segmentId, $segment['key'] ?? null, 'deleted', $segment, ['id' => $segmentId, 'status' => 'deleted'], $projectId);
 
         return new ApiResponse(204, null);
     }
@@ -505,6 +635,7 @@ final class NativeApplication
         foreach ($this->environments->allActiveByProject($projectId) as $environment) {
             $this->flagEnvironments->createDefaultForFlag($flag['id'], $environment['id'], $defaultValue, $flag['default_variant_key'] ?? null);
         }
+        $this->audit($principal, 'flag', $flag['id'], $flag['key'], 'created', null, $flag, $projectId);
 
         return new ApiResponse(201, $this->normalize($flag));
     }
@@ -598,6 +729,8 @@ final class NativeApplication
             }
         }
 
+        $this->audit($principal, 'flag', $flagId, $updated['key'] ?? null, 'updated', $flag, $updated, $projectId);
+
         return new ApiResponse(200, $this->normalize($updated));
     }
 
@@ -605,7 +738,7 @@ final class NativeApplication
     {
         $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
         $this->assertProjectActive($projectId);
-        $this->requireFlag($projectId, $flagId);
+        $flag = $this->requireFlag($projectId, $flagId);
 
         if ($this->overrides->hasAnyForFlag($flagId)) {
             $this->flags->update($projectId, $flagId, ['status' => 'archived']);
@@ -615,6 +748,7 @@ final class NativeApplication
             }
             $this->flags->delete($projectId, $flagId);
         }
+        $this->audit($principal, 'flag', $flagId, $flag['key'] ?? null, 'deleted', $flag, ['id' => $flagId, 'status' => 'deleted'], $projectId);
 
         return new ApiResponse(204, null);
     }
@@ -646,6 +780,9 @@ final class NativeApplication
         $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
         $flag = $this->requireFlag($projectId, $flagId);
         $environment = $this->requireEnvironmentByKey($projectId, $environmentKey);
+        if ((int) ($environment['requires_change_requests'] ?? 0) === 1) {
+            throw new ApiError('conflict', 'Protected environments require a change request for live config mutations', 409);
+        }
         $payload = $this->body();
 
         $defaultValue = array_key_exists('default_value', $payload) ? $payload['default_value'] : $flag['default_value'];
@@ -669,6 +806,7 @@ final class NativeApplication
             'default_variant_key' => $defaultVariantKey,
             'rules' => $rules,
         ]);
+        $this->audit($principal, 'flag_environment_config', $config['id'] ?? $flag['id'], $flag['key'], 'updated', $existingConfig, $config, $projectId, $environment['id']);
 
         return new ApiResponse(200, $this->normalize([
             ...$config,
@@ -681,8 +819,13 @@ final class NativeApplication
         $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
         $flag = $this->requireFlag($projectId, $flagId);
         $environment = $this->requireEnvironmentByKey($projectId, $environmentKey);
+        if ((int) ($environment['requires_change_requests'] ?? 0) === 1) {
+            throw new ApiError('conflict', 'Protected environments require a change request for live config mutations', 409);
+        }
+        $before = $this->flagEnvironments->find($flag['id'], $environment['id']);
         $this->flagEnvironments->delete($flag['id'], $environment['id']);
-        $this->flagEnvironments->createDefaultForFlag($flag['id'], $environment['id'], $flag['default_value'], $flag['default_variant_key'] ?? null);
+        $config = $this->flagEnvironments->createDefaultForFlag($flag['id'], $environment['id'], $flag['default_value'], $flag['default_variant_key'] ?? null);
+        $this->audit($principal, 'flag_environment_config', $config['id'] ?? $flag['id'], $flag['key'], 'deleted', $before, $config, $projectId, $environment['id']);
 
         return new ApiResponse(204, null);
     }
@@ -699,13 +842,17 @@ final class NativeApplication
             }
         }
 
-        return new ApiResponse(201, $this->normalize($this->clients->create([
+        $client = $this->clients->create([
             'project_id' => $projectId,
             'key' => $this->resourceKey($payload, 'key'),
             'name' => $this->requireString($payload, 'name'),
             'description' => $this->nullableString($payload['description'] ?? null),
             'metadata' => $this->metadata($payload['metadata'] ?? []),
-        ])));
+        ]);
+        $this->identityService->syncClientIdentity($projectId, $client);
+        $this->audit($principal, 'client', $client['id'], $client['key'], 'created', null, $client, $projectId);
+
+        return new ApiResponse(201, $this->normalize($client));
     }
 
     private function listClients(ApiPrincipal $principal, string $projectId): ApiResponse
@@ -737,7 +884,7 @@ final class NativeApplication
     {
         $this->authorizer->requireScope($principal, ScopeAuthorizer::CLIENTS_WRITE, $projectId);
         $this->assertProjectActive($projectId);
-        $this->requireClient($projectId, $clientId);
+        $before = $this->requireClient($projectId, $clientId);
         $payload = $this->body();
 
         if (array_key_exists('key', $payload)) {
@@ -753,15 +900,24 @@ final class NativeApplication
             $payload['metadata'] = $this->metadata($payload['metadata']);
         }
 
-        return new ApiResponse(200, $this->normalize($this->clients->update($projectId, $clientId, $payload)));
+        $updated = $this->clients->update($projectId, $clientId, $payload);
+        $this->identityService->syncClientIdentity($projectId, $updated);
+        $this->audit($principal, 'client', $clientId, $updated['key'] ?? null, 'updated', $before, $updated, $projectId);
+
+        return new ApiResponse(200, $this->normalize($updated));
     }
 
     private function deleteClient(ApiPrincipal $principal, string $projectId, string $clientId): ApiResponse
     {
         $this->authorizer->requireScope($principal, ScopeAuthorizer::CLIENTS_WRITE, $projectId);
         $this->assertProjectActive($projectId);
-        $this->requireClient($projectId, $clientId);
+        $client = $this->requireClient($projectId, $clientId);
         $this->clients->softDelete($projectId, $clientId);
+        $updated = $this->clients->find($projectId, $clientId);
+        if ($updated !== null) {
+            $this->identityService->syncClientIdentity($projectId, $updated);
+        }
+        $this->audit($principal, 'client', $clientId, $client['key'] ?? null, 'deleted', $client, ['id' => $clientId, 'status' => 'deleted'], $projectId);
 
         return new ApiResponse(204, null);
     }
@@ -785,7 +941,10 @@ final class NativeApplication
         }
         $this->validator->validateValue($flag['type'], $payload['value'], $flag['options']);
 
-        return new ApiResponse(200, $this->normalize($this->overrides->upsert($projectId, $flagId, $clientId, $payload['value'])));
+        $override = $this->overrides->upsert($projectId, $flagId, $clientId, $payload['value']);
+        $this->audit($principal, 'client_override', $override['id'] ?? $flagId . ':' . $clientId, $flag['key'], 'updated', null, $override, $projectId);
+
+        return new ApiResponse(200, $this->normalize($override));
     }
 
     private function listOverrides(ApiPrincipal $principal, string $projectId, string $clientId): ApiResponse
@@ -807,10 +966,380 @@ final class NativeApplication
         $this->authorizer->requireScope($principal, ScopeAuthorizer::OVERRIDES_WRITE, $projectId);
         $this->assertProjectActive($projectId);
         $this->requireClient($projectId, $clientId);
-        $this->requireFlag($projectId, $flagId);
+        $flag = $this->requireFlag($projectId, $flagId);
+        $before = $this->overrides->find($flagId, $clientId);
         $this->overrides->delete($flagId, $clientId);
+        $this->audit($principal, 'client_override', $before['id'] ?? $flagId . ':' . $clientId, $flag['key'], 'deleted', $before, null, $projectId);
 
         return new ApiResponse(204, null);
+    }
+
+    private function createIdentity(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::CLIENTS_WRITE, $projectId);
+        $this->assertProjectActive($projectId);
+        $payload = $this->body();
+        $traits = $this->identityService->assertTraitPayload($payload['traits'] ?? []);
+        $identity = $this->identityService->create($projectId, [
+            'kind' => $this->identityKind($payload['kind'] ?? null),
+            'identifier' => $this->identityIdentifier($payload['identifier'] ?? null),
+            'display_name' => $this->nullableString($payload['display_name'] ?? null),
+            'description' => $this->nullableString($payload['description'] ?? null),
+            'traits' => $traits,
+        ]);
+        $this->audit($principal, 'identity', $identity['id'], $identity['identifier'], 'created', null, $identity, $projectId);
+
+        return new ApiResponse(201, $this->normalize($identity));
+    }
+
+    private function listIdentities(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::CLIENTS_READ, $projectId);
+        $limit = $this->limit();
+        $offset = $this->offset();
+        $kind = $this->query('kind');
+        $identifier = $this->query('identifier');
+        $status = $this->query('status');
+        $items = $this->identities->paginateByProject($projectId, $limit, $offset, $kind, $identifier, $status);
+        foreach ($items as &$item) {
+            $item['traits'] = $this->identityService->traitMap($item['id']);
+        }
+
+        return new ApiResponse(200, [
+            'items' => array_map($this->normalize(...), $items),
+            'meta' => [
+                'total' => $this->identities->countByProject($projectId, $kind, $identifier, $status),
+                'limit' => $limit,
+                'offset' => $offset,
+            ],
+        ]);
+    }
+
+    private function showIdentity(ApiPrincipal $principal, string $projectId, string $identityId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::CLIENTS_READ, $projectId);
+
+        return new ApiResponse(200, $this->normalize($this->identityService->get($projectId, $identityId)));
+    }
+
+    private function updateIdentity(ApiPrincipal $principal, string $projectId, string $identityId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::CLIENTS_WRITE, $projectId);
+        $before = $this->requireIdentity($projectId, $identityId);
+        $payload = $this->body();
+        $updates = [];
+        if (array_key_exists('kind', $payload)) {
+            $updates['kind'] = $this->identityKind($payload['kind']);
+        }
+        if (array_key_exists('identifier', $payload)) {
+            $updates['identifier'] = $this->identityIdentifier($payload['identifier']);
+        }
+        if (array_key_exists('display_name', $payload)) {
+            $updates['display_name'] = $this->nullableString($payload['display_name']);
+        }
+        if (array_key_exists('description', $payload)) {
+            $updates['description'] = $this->nullableString($payload['description']);
+        }
+        if (array_key_exists('status', $payload)) {
+            $updates['status'] = $this->identityStatus($payload['status']);
+        }
+        $updated = $this->identities->update($projectId, $identityId, $updates);
+        $updated['traits'] = $this->identityService->traitMap($identityId);
+        $this->audit($principal, 'identity', $identityId, $updated['identifier'] ?? null, 'updated', $before, $updated, $projectId);
+
+        return new ApiResponse(200, $this->normalize($updated));
+    }
+
+    private function deleteIdentity(ApiPrincipal $principal, string $projectId, string $identityId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::CLIENTS_WRITE, $projectId);
+        $before = $this->identityService->get($projectId, $identityId);
+        $deleted = $this->identities->softDelete($projectId, $identityId);
+        $this->audit($principal, 'identity', $identityId, $before['identifier'] ?? null, 'deleted', $before, $deleted, $projectId);
+
+        return new ApiResponse(204, null);
+    }
+
+    private function listIdentityTraits(ApiPrincipal $principal, string $projectId, string $identityId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::CLIENTS_READ, $projectId);
+        $this->requireIdentity($projectId, $identityId);
+
+        return new ApiResponse(200, [
+            'identity_id' => $identityId,
+            'traits' => $this->identityService->traitMap($identityId),
+        ]);
+    }
+
+    private function putIdentityTrait(ApiPrincipal $principal, string $projectId, string $identityId, string $traitKey): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::CLIENTS_WRITE, $projectId);
+        $identity = $this->requireIdentity($projectId, $identityId);
+        $payload = $this->body();
+        if (!array_key_exists('value', $payload)) {
+            throw new ApiError('validation_failed', 'value is required', 422);
+        }
+        $before = $this->identityTraits->find($identityId, $traitKey);
+        $trait = $this->identityService->upsertTrait($identityId, $traitKey, $payload['value']);
+        $this->audit($principal, 'identity_trait', $trait['id'] ?? ($identityId . ':' . $traitKey), $traitKey, 'updated', $before, $trait, $projectId);
+
+        return new ApiResponse(200, $this->normalize([
+            'identity_id' => $identityId,
+            'identity' => ['id' => $identity['id'], 'kind' => $identity['kind'], 'identifier' => $identity['identifier']],
+            'trait' => $trait,
+        ]));
+    }
+
+    private function patchIdentityTraits(ApiPrincipal $principal, string $projectId, string $identityId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::CLIENTS_WRITE, $projectId);
+        $this->requireIdentity($projectId, $identityId);
+        $before = $this->identityService->traitMap($identityId);
+        $payload = $this->body();
+        if (array_key_exists('set', $payload)) {
+            $this->identityService->assertTraitPayload($payload['set']);
+        }
+        $traits = $this->identityService->bulkPatchTraits($identityId, [
+            'set' => $payload['set'] ?? [],
+            'unset' => $payload['unset'] ?? [],
+        ]);
+        $this->audit($principal, 'identity_trait', $identityId, $identityId, 'updated', $before, $traits, $projectId);
+
+        return new ApiResponse(200, $this->normalize([
+            'identity_id' => $identityId,
+            'traits' => $traits,
+        ]));
+    }
+
+    private function listAuditLogs(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_READ, $projectId);
+        $limit = $this->limit();
+        $offset = $this->offset();
+        $environmentId = null;
+        if (($environmentKey = $this->query('environment')) !== null) {
+            $environmentId = $this->requireEnvironmentByKey($projectId, $environmentKey)['id'];
+        }
+        $filters = [
+            'resource_type' => $this->query('resource_type'),
+            'resource_id' => $this->query('resource_id'),
+            'resource_key' => $this->query('resource_key'),
+            'environment_id' => $environmentId,
+            'actor_id' => $this->query('actor_id'),
+            'action' => $this->query('action'),
+            'created_from' => $this->query('created_from'),
+            'created_to' => $this->query('created_to'),
+        ];
+
+        return new ApiResponse(200, [
+            'items' => array_map($this->normalize(...), $this->auditLogs->paginateByProject($projectId, $limit, $offset, $filters)),
+            'meta' => [
+                'total' => $this->auditLogs->countByProject($projectId, $filters),
+                'limit' => $limit,
+                'offset' => $offset,
+            ],
+        ]);
+    }
+
+    private function analyticsByFlag(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_READ, $projectId);
+        return new ApiResponse(200, ['items' => $this->normalize($this->analytics->byFlag($projectId, $this->analyticsFilters($projectId), $this->limit()))]);
+    }
+
+    private function analyticsByVariant(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_READ, $projectId);
+        return new ApiResponse(200, ['items' => $this->normalize($this->analytics->byVariant($projectId, $this->analyticsFilters($projectId), $this->limit()))]);
+    }
+
+    private function analyticsByEnvironment(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_READ, $projectId);
+        return new ApiResponse(200, ['items' => $this->normalize($this->analytics->byEnvironment($projectId, $this->analyticsFilters($projectId), $this->limit()))]);
+    }
+
+    private function analyticsRecentActivity(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_READ, $projectId);
+        return new ApiResponse(200, ['items' => $this->normalize($this->analytics->recentActivity($projectId, $this->analyticsFilters($projectId), $this->limit()))]);
+    }
+
+    private function createChangeRequest(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
+        $payload = $this->body();
+        $request = $this->changeRequestService->propose($principal, $projectId, [
+            'flag_id' => $this->requireString($payload, 'flag_id'),
+            'environment_key' => $this->requireString($payload, 'environment_key'),
+            'title' => $this->requireString($payload, 'title'),
+            'description' => $this->nullableString($payload['description'] ?? null),
+            'desired_config' => $this->changeRequestDesiredConfig($payload['desired_config'] ?? null),
+            'base_snapshot_checksum' => $this->nullableString($payload['base_snapshot_checksum'] ?? null),
+        ]);
+
+        return new ApiResponse(201, $this->normalize($request));
+    }
+
+    private function listChangeRequests(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_READ, $projectId);
+        $limit = $this->limit();
+        $offset = $this->offset();
+
+        return new ApiResponse(200, [
+            'items' => array_map($this->normalize(...), $this->changeRequests->paginateByProject($projectId, $limit, $offset)),
+            'meta' => ['total' => $this->changeRequests->countByProject($projectId), 'limit' => $limit, 'offset' => $offset],
+        ]);
+    }
+
+    private function showChangeRequest(ApiPrincipal $principal, string $projectId, string $changeRequestId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_READ, $projectId);
+
+        return new ApiResponse(200, $this->normalize($this->changeRequestService->require($projectId, $changeRequestId)));
+    }
+
+    private function reviewChangeRequest(ApiPrincipal $principal, string $projectId, string $changeRequestId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
+        $payload = $this->body();
+        $decision = $this->requireString($payload, 'decision');
+        if (!in_array($decision, ['approve', 'reject'], true)) {
+            throw new ApiError('validation_failed', 'decision must be approve or reject', 422);
+        }
+
+        return new ApiResponse(200, $this->normalize($this->changeRequestService->review($principal, $projectId, $changeRequestId, $decision)));
+    }
+
+    private function applyChangeRequest(ApiPrincipal $principal, string $projectId, string $changeRequestId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
+        $request = $this->changeRequestService->require($projectId, $changeRequestId);
+        $approved = $request['approved_payload'] ?? $request['proposed_payload'];
+        $environment = $this->requireEnvironmentByKey($projectId, $approved['environment_key']);
+        $snapshot = $this->resolvedConfig->buildSnapshot($projectId, $environment);
+
+        return new ApiResponse(200, $this->normalize($this->changeRequestService->apply($principal, $projectId, $changeRequestId, $snapshot['checksum'])));
+    }
+
+    private function exportProjectConfig(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_READ, $projectId);
+
+        return new ApiResponse(200, $this->normalize($this->importExportService->exportProject($projectId)));
+    }
+
+    private function importProjectConfig(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
+        $payload = $this->body();
+        $dryRun = $this->boolQuery('dry_run', true);
+        $replace = $this->boolQuery('replace', false);
+        $plan = $this->buildImportPlan($projectId, $payload);
+        if ($dryRun) {
+            return new ApiResponse(200, $this->normalize(['dry_run' => true, 'plan' => $plan]));
+        }
+        if ($plan['conflicts'] !== [] && !$replace) {
+            throw new ApiError('conflict', 'Import conflicts detected', 409, ['conflicts' => $plan['conflicts']]);
+        }
+
+        foreach ($plan['environments'] as $entry) {
+            if ($entry['action'] === 'create') {
+                $this->environments->create([
+                    'project_id' => $projectId,
+                    ...$entry['payload'],
+                ]);
+            } elseif ($replace) {
+                $existing = $this->requireEnvironmentByKey($projectId, $entry['key']);
+                $this->environments->update($projectId, $existing['id'], $entry['payload']);
+            }
+        }
+        foreach ($plan['segments'] as $entry) {
+            if ($entry['action'] === 'create') {
+                $this->segments->create(['project_id' => $projectId, ...$entry['payload']]);
+            } elseif ($replace) {
+                $existing = $this->segments->findByKey($projectId, $entry['key']);
+                if ($existing !== null) {
+                    $this->segments->update($projectId, $existing['id'], $entry['payload']);
+                }
+            }
+        }
+        foreach ($plan['flags'] as $entry) {
+            if ($entry['action'] === 'create') {
+                $this->flags->create(['project_id' => $projectId, ...$entry['payload']]);
+            } elseif ($replace) {
+                $existing = $this->flags->findByKey($projectId, $entry['key']);
+                if ($existing !== null) {
+                    $this->flags->update($projectId, $existing['id'], $entry['payload']);
+                }
+            }
+        }
+        foreach ($plan['flag_environment_configs'] as $entry) {
+            $flag = $this->flags->findByKey($projectId, $entry['flag_key']);
+            $environment = $this->requireEnvironmentByKey($projectId, $entry['environment_key']);
+            if ($flag !== null) {
+                $this->flagEnvironments->upsert($flag['id'], $environment['id'], $entry['payload']);
+            }
+        }
+        $this->audit($principal, 'import', $projectId, $projectId, 'imported', null, $plan, $projectId);
+
+        return new ApiResponse(200, $this->normalize(['dry_run' => false, 'plan' => $plan]));
+    }
+
+    private function createCodeReferences(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
+        $payload = $this->body();
+        if (!is_array($payload['references'] ?? null)) {
+            throw new ApiError('validation_failed', 'references must be an array', 422);
+        }
+        $created = $this->codeReferenceService->ingest($projectId, $payload['references']);
+        $this->audit($principal, 'code_reference', $projectId, 'batch', 'created', null, $created, $projectId);
+
+        return new ApiResponse(201, $this->normalize(['items' => $created]));
+    }
+
+    private function listCodeReferences(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_READ, $projectId);
+        $limit = $this->limit();
+        $offset = $this->offset();
+
+        return new ApiResponse(200, [
+            'items' => array_map($this->normalize(...), $this->codeReferences->paginateByProject($projectId, $limit, $offset)),
+            'meta' => ['total' => $this->codeReferences->countByProject($projectId), 'limit' => $limit, 'offset' => $offset],
+        ]);
+    }
+
+    private function deleteCodeReference(ApiPrincipal $principal, string $projectId, string $referenceId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_WRITE, $projectId);
+        $reference = $this->codeReferences->find($projectId, $referenceId);
+        if ($reference === null) {
+            throw new ApiError('not_found', 'Code reference not found', 404);
+        }
+        $this->codeReferences->delete($projectId, $referenceId);
+        $this->audit($principal, 'code_reference', $referenceId, $reference['reference_path'], 'deleted', $reference, null, $projectId);
+
+        return new ApiResponse(204, null);
+    }
+
+    private function staleFlagReport(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::FLAGS_READ, $projectId);
+        $items = $this->codeReferenceService->staleReport(
+            $projectId,
+            $this->flags->activeByProject($projectId),
+            $this->query('evaluated_before'),
+            $this->query('stale_status'),
+            array_key_exists('has_code_references', $_GET) ? $this->boolQuery('has_code_references', false) : null
+        );
+
+        return new ApiResponse(200, $this->normalize([
+            'items' => array_slice($items, $this->offset(), $this->limit()),
+            'meta' => ['total' => count($items), 'limit' => $this->limit(), 'offset' => $this->offset()],
+        ]));
     }
 
     private function listEvaluationEvents(ApiPrincipal $principal, string $projectId): ApiResponse
@@ -887,6 +1416,8 @@ final class NativeApplication
             'expires_at' => $this->nullableString($payload['expires_at'] ?? null),
         ]);
 
+        $this->audit($principal, 'api_key', $key['id'], $key['prefix'], 'created', null, $key, $projectId);
+
         return new ApiResponse(201, [...$this->normalize($key), 'secret' => $generated['secret']]);
     }
 
@@ -922,6 +1453,7 @@ final class NativeApplication
             throw new ApiError('forbidden', 'API key cannot revoke this key', 403);
         }
         $this->apiKeys->revoke($keyId);
+        $this->audit($principal, 'api_key', $key['id'], $key['prefix'], 'deleted', $key, ['id' => $key['id'], 'revoked_at' => gmdate('c')], $key['project_id']);
 
         return new ApiResponse(204, null);
     }
@@ -970,12 +1502,126 @@ final class NativeApplication
         return new ApiResponse(200, ['key' => $flagKey, ...$payload['flags'][$flagKey]]);
     }
 
+    private function evaluateIdentity(ApiPrincipal $principal, string $projectId, string $environmentKey): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::RUNTIME_READ_ANY, $projectId);
+        $payload = $this->body();
+        $environment = $this->requireEnvironmentByKey($projectId, $environmentKey);
+        $identity = $this->requireIdentityByKindAndIdentifier(
+            $projectId,
+            $this->identityKind($payload['kind'] ?? null),
+            $this->identityIdentifier($payload['identifier'] ?? null)
+        );
+        $resolved = $this->resolvedConfig->resolveProjectIdentity(
+            $projectId,
+            $environment,
+            $identity,
+            true,
+            $this->transientTraitsPayload($payload)
+        );
+        if (is_array($payload['flag_keys'] ?? null)) {
+            $resolved['flags'] = array_intersect_key($resolved['flags'], array_fill_keys($payload['flag_keys'], true));
+        }
+
+        return new ApiResponse(200, $this->normalize($resolved));
+    }
+
+    private function projectIdentityConfig(ApiPrincipal $principal, string $projectId, string $environmentKey, string $kind, string $identifier): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::RUNTIME_READ_ANY, $projectId);
+        $environment = $this->requireEnvironmentByKey($projectId, $environmentKey);
+        $payload = $this->body();
+        $identity = $this->requireIdentityByKindAndIdentifier($projectId, $kind, $identifier);
+        $resolved = $this->resolvedConfig->resolveProjectIdentity(
+            $projectId,
+            $environment,
+            $identity,
+            true,
+            $this->transientTraitsPayload($payload)
+        );
+        if (is_array($payload['flag_keys'] ?? null)) {
+            $resolved['flags'] = array_intersect_key($resolved['flags'], array_fill_keys($payload['flag_keys'], true));
+        }
+
+        return new ApiResponse(200, $this->normalize($resolved));
+    }
+
+    private function projectIdentityFlag(ApiPrincipal $principal, string $projectId, string $environmentKey, string $kind, string $identifier, string $flagKey): ApiResponse
+    {
+        $payload = $this->projectIdentityConfig($principal, $projectId, $environmentKey, $kind, $identifier)->payload();
+        if ($payload === null || !array_key_exists($flagKey, $payload['flags'])) {
+            throw new ApiError('not_found', 'Flag not found', 404);
+        }
+
+        return new ApiResponse(200, ['key' => $flagKey, ...$payload['flags'][$flagKey]]);
+    }
+
     private function projectEnvironmentSnapshot(ApiPrincipal $principal, string $projectId, string $environmentKey): ApiResponse
     {
         $this->authorizer->requireScope($principal, ScopeAuthorizer::RUNTIME_READ_ANY, $projectId);
         $environment = $this->requireEnvironmentByKey($projectId, $environmentKey);
+        $snapshot = $this->resolvedConfig->buildSnapshot($projectId, $environment);
+        $etag = '"' . $snapshot['checksum'] . '"';
+        $ifNoneMatch = trim($_SERVER['HTTP_IF_NONE_MATCH'] ?? '');
+        if ($ifNoneMatch !== '' && trim($ifNoneMatch, '"') === $snapshot['checksum']) {
+            return new ApiResponse(304, null, ['ETag' => $etag]);
+        }
 
-        return new ApiResponse(200, $this->normalize($this->resolvedConfig->buildSnapshot($projectId, $environment)));
+        return new ApiResponse(200, $this->normalize($snapshot['payload']), ['ETag' => $etag]);
+    }
+
+    private function batchEvaluationEvents(ApiPrincipal $principal, string $projectId): ApiResponse
+    {
+        $this->authorizer->requireScope($principal, ScopeAuthorizer::RUNTIME_READ_ANY, $projectId);
+        $payload = $this->body();
+        $environment = $this->requireEnvironmentByKey($projectId, $this->requireString($payload, 'environment_key'));
+        if (!is_array($payload['events'] ?? null)) {
+            throw new ApiError('validation_failed', 'events must be an array', 422);
+        }
+
+        $created = [];
+        foreach ($payload['events'] as $entry) {
+            if (!is_array($entry)) {
+                throw new ApiError('validation_failed', 'events must contain objects', 422);
+            }
+            $flag = $this->flags->findByKey($projectId, $this->requireString($entry, 'flag_key'));
+            if ($flag === null) {
+                throw new ApiError('not_found', 'Flag not found for event batch', 404);
+            }
+            $client = null;
+            if (isset($entry['client_key']) && is_string($entry['client_key']) && trim($entry['client_key']) !== '') {
+                $client = $this->clients->findByKey($projectId, trim($entry['client_key']));
+            }
+            $identity = null;
+            if (isset($entry['identity_kind'], $entry['identity_identifier']) && is_string($entry['identity_kind']) && is_string($entry['identity_identifier'])) {
+                $identity = $this->identities->findByKindAndIdentifier($projectId, trim($entry['identity_kind']), trim($entry['identity_identifier']));
+            }
+            $created[] = $this->events->create([
+                'project_id' => $projectId,
+                'environment_id' => $environment['id'],
+                'flag_id' => $flag['id'],
+                'client_id' => $client['id'] ?? null,
+                'identity_id' => $identity['id'] ?? null,
+                'identity_kind' => $entry['identity_kind'] ?? ($identity['kind'] ?? null),
+                'identity_identifier' => $entry['identity_identifier'] ?? ($identity['identifier'] ?? null),
+                'variant_key' => $entry['variant_key'] ?? null,
+                'value' => $entry['value'] ?? null,
+                'reason' => $entry['reason'] ?? 'batch_ingest',
+                'matched_rule' => $entry['matched_rule'] ?? null,
+                'context' => [
+                    'snapshot_checksum' => $payload['snapshot_checksum'] ?? null,
+                    'environment_key' => $environment['key'],
+                ],
+                'traits' => $entry['traits'] ?? null,
+                'transient_traits' => $entry['transient_traits'] ?? null,
+                'created_at' => $this->databaseTimestamp($entry['occurred_at'] ?? null) ?? gmdate('Y-m-d H:i:s'),
+            ]);
+        }
+
+        return new ApiResponse(202, $this->normalize([
+            'accepted' => count($created),
+            'batch_id' => $this->nullableString($payload['batch_id'] ?? null),
+        ]));
     }
 
     private function resolvedPayload(string $projectId, string $clientId, array $environment, bool $logEvents): array
@@ -990,6 +1636,26 @@ final class NativeApplication
         $payload['project']['slug'] = $project['slug'];
 
         return $this->normalize($payload);
+    }
+
+    private function requireIdentity(string $projectId, string $identityId): array
+    {
+        $identity = $this->identities->find($projectId, $identityId);
+        if ($identity === null) {
+            throw new ApiError('not_found', 'Identity not found', 404);
+        }
+
+        return $identity;
+    }
+
+    private function requireIdentityByKindAndIdentifier(string $projectId, string $kind, string $identifier): array
+    {
+        $identity = $this->identities->findByKindAndIdentifier($projectId, $kind, $identifier);
+        if ($identity === null || $identity['status'] === 'deleted') {
+            throw new ApiError('not_found', 'Identity not found', 404);
+        }
+
+        return $identity;
     }
 
     private function requireProject(string $projectId): array
@@ -1087,6 +1753,20 @@ final class NativeApplication
         return trim($header);
     }
 
+    private function audit(ApiPrincipal $principal, string $resourceType, string $resourceId, ?string $resourceKey, string $action, mixed $before, mixed $after, string $projectId, ?string $environmentId = null): void
+    {
+        $this->auditLogService->record($principal, [
+            'project_id' => $projectId,
+            'environment_id' => $environmentId,
+            'resource_type' => $resourceType,
+            'resource_id' => $resourceId,
+            'resource_key' => $resourceKey,
+            'action' => $action,
+            'before_payload' => is_array($before) ? $before : null,
+            'after_payload' => is_array($after) ? $after : null,
+        ]);
+    }
+
     private function body(): array
     {
         $raw = file_get_contents('php://input');
@@ -1105,6 +1785,26 @@ final class NativeApplication
     private function query(string $key): ?string
     {
         return isset($_GET[$key]) && is_string($_GET[$key]) ? trim($_GET[$key]) : null;
+    }
+
+    private function analyticsFilters(string $projectId): array
+    {
+        $environmentId = null;
+        if (($environment = $this->query('environment')) !== null) {
+            $environmentId = $this->requireEnvironmentByKey($projectId, $environment)['id'];
+        }
+        $flagId = $this->query('flag_id');
+        if ($flagId === null && ($flagKey = $this->query('flag_key')) !== null) {
+            $flag = $this->flags->findByKey($projectId, $flagKey);
+            $flagId = $flag['id'] ?? null;
+        }
+
+        return [
+            'environment_id' => $environmentId,
+            'flag_id' => $flagId,
+            'created_from' => $this->query('created_from'),
+            'created_to' => $this->query('created_to'),
+        ];
     }
 
     private function limit(): int
@@ -1348,6 +2048,15 @@ final class NativeApplication
         return $value;
     }
 
+    private function boolBody(array $payload, string $field, bool $default): bool
+    {
+        if (!array_key_exists($field, $payload)) {
+            return $default;
+        }
+
+        return $this->boolValue($payload[$field]);
+    }
+
     private function intValue(mixed $value, string $field, int $min, int $max): int
     {
         if (!is_int($value) && !(is_string($value) && preg_match('/^-?\d+$/', $value) === 1)) {
@@ -1368,6 +2077,181 @@ final class NativeApplication
         }
 
         return $value;
+    }
+
+    private function identityKind(mixed $value): string
+    {
+        if (!is_string($value) || trim($value) === '') {
+            throw new ApiError('validation_failed', 'kind is required', 422);
+        }
+        $value = trim($value);
+        if (!preg_match('/^[a-z][a-z0-9_:-]{0,31}$/', $value)) {
+            throw new ApiError('validation_failed', 'kind must be a lowercase identifier', 422);
+        }
+
+        return $value;
+    }
+
+    private function identityIdentifier(mixed $value): string
+    {
+        if (!is_string($value) || trim($value) === '') {
+            throw new ApiError('validation_failed', 'identifier is required', 422);
+        }
+
+        return trim($value);
+    }
+
+    private function identityStatus(mixed $value): string
+    {
+        if (!is_string($value) || !in_array($value, ['active', 'disabled', 'deleted'], true)) {
+            throw new ApiError('validation_failed', 'status must be active, disabled, or deleted', 422);
+        }
+
+        return $value;
+    }
+
+    private function transientTraitsPayload(array $payload): array
+    {
+        return $this->identityService->assertTraitPayload($payload['transient_traits'] ?? []);
+    }
+
+    private function databaseTimestamp(mixed $value): ?string
+    {
+        $timestamp = $this->nullableString($value);
+        if ($timestamp === null) {
+            return null;
+        }
+
+        $unix = strtotime($timestamp);
+        if ($unix === false) {
+            throw new ApiError('validation_failed', 'Invalid timestamp value', 422);
+        }
+
+        return gmdate('Y-m-d H:i:s', $unix);
+    }
+
+    private function changeRequestDesiredConfig(mixed $value): array
+    {
+        if (!is_array($value)) {
+            throw new ApiError('validation_failed', 'desired_config is required', 422);
+        }
+
+        return [
+            'default_value' => $value['default_value'] ?? null,
+            'default_variant_key' => $this->nullableString($value['default_variant_key'] ?? null),
+            'rules' => is_array($value['rules'] ?? null) ? $value['rules'] : [],
+        ];
+    }
+
+    private function buildImportPlan(string $projectId, array $payload): array
+    {
+        $plan = [
+            'creates' => [],
+            'updates' => [],
+            'conflicts' => [],
+            'skipped' => [],
+            'environments' => [],
+            'segments' => [],
+            'flags' => [],
+            'flag_environment_configs' => [],
+        ];
+
+        $environments = $payload['environments'] ?? [];
+        if (is_array($environments)) {
+            usort($environments, fn (array $a, array $b): int => strcmp((string) ($a['key'] ?? ''), (string) ($b['key'] ?? '')));
+            foreach ($environments as $entry) {
+                $key = (string) ($entry['key'] ?? '');
+                $exists = $key !== '' ? $this->environments->findByKey($projectId, $key) : null;
+                $action = $exists === null ? 'create' : 'update';
+                if ($exists !== null) {
+                    $plan['conflicts'][] = ['resource' => 'environment', 'key' => $key];
+                }
+                $plan['environments'][] = [
+                    'key' => $key,
+                    'action' => $action,
+                    'payload' => [
+                        'key' => $key,
+                        'name' => $entry['name'] ?? $key,
+                        'description' => $entry['description'] ?? null,
+                        'is_default' => (bool) ($entry['is_default'] ?? false),
+                        'requires_change_requests' => (bool) ($entry['requires_change_requests'] ?? false),
+                        'sort_order' => (int) ($entry['sort_order'] ?? 100),
+                    ],
+                ];
+            }
+        }
+
+        $segments = $payload['segments'] ?? [];
+        if (is_array($segments)) {
+            usort($segments, fn (array $a, array $b): int => strcmp((string) ($a['key'] ?? ''), (string) ($b['key'] ?? '')));
+            foreach ($segments as $entry) {
+                $key = (string) ($entry['key'] ?? '');
+                $exists = $key !== '' ? $this->segments->findByKey($projectId, $key) : null;
+                if ($exists !== null) {
+                    $plan['conflicts'][] = ['resource' => 'segment', 'key' => $key];
+                }
+                $plan['segments'][] = [
+                    'key' => $key,
+                    'action' => $exists === null ? 'create' : 'update',
+                    'payload' => [
+                        'key' => $key,
+                        'name' => $entry['name'] ?? $key,
+                        'description' => $entry['description'] ?? null,
+                        'rules' => $entry['rules'] ?? [],
+                    ],
+                ];
+            }
+        }
+
+        $flags = $payload['flags'] ?? [];
+        if (is_array($flags)) {
+            usort($flags, fn (array $a, array $b): int => strcmp((string) ($a['key'] ?? ''), (string) ($b['key'] ?? '')));
+            foreach ($flags as $entry) {
+                $key = (string) ($entry['key'] ?? '');
+                $exists = $key !== '' ? $this->flags->findByKey($projectId, $key) : null;
+                if ($exists !== null) {
+                    $plan['conflicts'][] = ['resource' => 'flag', 'key' => $key];
+                }
+                $plan['flags'][] = [
+                    'key' => $key,
+                    'action' => $exists === null ? 'create' : 'update',
+                    'payload' => [
+                        'key' => $key,
+                        'name' => $entry['name'] ?? $key,
+                        'description' => $entry['description'] ?? null,
+                        'flag_kind' => $entry['flag_kind'] ?? 'release',
+                        'type' => $entry['type'] ?? 'boolean',
+                        'default_value' => $entry['default_value'] ?? false,
+                        'options' => $entry['options'] ?? null,
+                        'variants' => $entry['variants'] ?? null,
+                        'default_variant_key' => $entry['default_variant_key'] ?? null,
+                        'prerequisites' => $entry['prerequisites'] ?? null,
+                        'expires_at' => $entry['expires_at'] ?? null,
+                    ],
+                ];
+            }
+        }
+
+        $configs = $payload['flag_environment_configs'] ?? [];
+        if (is_array($configs)) {
+            usort($configs, fn (array $a, array $b): int => [($a['environment_key'] ?? ''), ($a['flag_key'] ?? '')] <=> [($b['environment_key'] ?? ''), ($b['flag_key'] ?? '')]);
+            foreach ($configs as $entry) {
+                $plan['flag_environment_configs'][] = [
+                    'flag_key' => $entry['flag_key'],
+                    'environment_key' => $entry['environment_key'],
+                    'payload' => [
+                        'default_value' => $entry['default_value'] ?? null,
+                        'default_variant_key' => $entry['default_variant_key'] ?? null,
+                        'rules' => $entry['rules'] ?? [],
+                    ],
+                ];
+            }
+        }
+
+        $plan['creates'] = count(array_filter([...$plan['environments'], ...$plan['segments'], ...$plan['flags']], fn (array $entry): bool => $entry['action'] === 'create'));
+        $plan['updates'] = count(array_filter([...$plan['environments'], ...$plan['segments'], ...$plan['flags']], fn (array $entry): bool => $entry['action'] === 'update'));
+
+        return $plan;
     }
 
     private function environmentFromRequest(string $projectId, ?string $environmentKey): array

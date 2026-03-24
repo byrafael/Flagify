@@ -22,7 +22,7 @@ final class FlagEvaluationService
     ) {
     }
 
-    public function evaluateFlag(array $flag, array $environment, array $client, array $segmentMap, array $overrideMap, array $flagMap, array $stack = []): array
+    public function evaluateFlag(array $flag, array $environment, array $subject, array $segmentMap, array $overrideMap, array $flagMap, array $stack = []): array
     {
         if (in_array($flag['key'], $stack, true)) {
             return $this->fallbackResult($flag, $environment, null, 'cyclic_prerequisite');
@@ -50,7 +50,7 @@ final class FlagEvaluationService
             $result = $this->evaluateFlag(
                 $prerequisiteFlag,
                 $environment,
-                $client,
+                $subject,
                 $segmentMap,
                 $overrideMap,
                 $flagMap,
@@ -65,13 +65,13 @@ final class FlagEvaluationService
             if (!$this->isRuleActive($rule)) {
                 continue;
             }
-            if (!$this->segmentsMatch($rule['segment_keys'] ?? [], $segmentMap, $client)) {
+            if (!$this->segmentsMatch($rule['segment_keys'] ?? [], $segmentMap, $subject)) {
                 continue;
             }
-            if (!$this->conditionsMatch($rule['conditions'] ?? [], $client)) {
+            if (!$this->conditionsMatch($rule['conditions'] ?? [], $subject)) {
                 continue;
             }
-            if (!$this->passesPercentage($rule['percentage'] ?? null, $rule['bucketing_key'] ?? 'key', $flag['key'], $environment['key'], $client)) {
+            if (!$this->passesPercentage($rule['percentage'] ?? null, $rule['bucketing_key'] ?? 'key', $flag['key'], $environment['key'], $subject)) {
                 continue;
             }
 
@@ -87,7 +87,7 @@ final class FlagEvaluationService
         return $this->fallbackResult($flag, $environment, $environmentConfig, 'default');
     }
 
-    public function buildSnapshot(string $projectId, array $environment, array $flags, array $segments): array
+    public function buildSnapshot(array $project, array $environment, array $flags, array $segments): array
     {
         $segmentPayload = [];
         foreach ($segments as $segment) {
@@ -120,7 +120,10 @@ final class FlagEvaluationService
         }
 
         return [
-            'project_id' => $projectId,
+            'project' => [
+                'id' => $project['id'],
+                'slug' => $project['slug'],
+            ],
             'environment' => [
                 'id' => $environment['id'],
                 'key' => $environment['key'],
@@ -130,7 +133,19 @@ final class FlagEvaluationService
             'flags' => $flagPayload,
             'meta' => [
                 'generated_at' => $this->clock->nowIso(),
-                'mode' => 'local_evaluation_snapshot',
+                'poll_ttl_seconds' => 30,
+                'evaluation_precedence' => [
+                    'client_override',
+                    'prerequisites',
+                    'rules',
+                    'environment_default',
+                    'flag_default',
+                ],
+                'trait_precedence' => [
+                    'transient_traits',
+                    'persisted_traits',
+                    'client_metadata_fallback',
+                ],
             ],
         ];
     }
@@ -214,11 +229,11 @@ final class FlagEvaluationService
         return true;
     }
 
-    private function segmentsMatch(array $segmentKeys, array $segmentMap, array $client): bool
+    private function segmentsMatch(array $segmentKeys, array $segmentMap, array $subject): bool
     {
         foreach ($segmentKeys as $segmentKey) {
             $segment = $segmentMap[$segmentKey] ?? null;
-            if ($segment === null || !$this->conditionsMatch($segment['rules'] ?? [], $client)) {
+            if ($segment === null || !$this->conditionsMatch($segment['rules'] ?? [], $subject)) {
                 return false;
             }
         }
@@ -226,7 +241,7 @@ final class FlagEvaluationService
         return true;
     }
 
-    private function conditionsMatch(array $conditions, array $client): bool
+    private function conditionsMatch(array $conditions, array $subject): bool
     {
         foreach ($conditions as $condition) {
             if (!is_array($condition)) {
@@ -234,7 +249,7 @@ final class FlagEvaluationService
             }
             $attribute = is_string($condition['attribute'] ?? null) ? $condition['attribute'] : '';
             $operator = is_string($condition['operator'] ?? null) ? $condition['operator'] : 'equals';
-            $actual = $this->attributeValue($client, $attribute);
+            $actual = $this->attributeValue($subject, $attribute);
             $value = $condition['value'] ?? null;
             $values = $condition['values'] ?? null;
 
@@ -246,7 +261,7 @@ final class FlagEvaluationService
         return true;
     }
 
-    private function passesPercentage(mixed $percentage, string $bucketingKey, string $flagKey, string $environmentKey, array $client): bool
+    private function passesPercentage(mixed $percentage, string $bucketingKey, string $flagKey, string $environmentKey, array $subject): bool
     {
         if ($percentage === null) {
             return true;
@@ -255,7 +270,7 @@ final class FlagEvaluationService
             return false;
         }
 
-        $bucketValue = $this->attributeValue($client, $bucketingKey);
+        $bucketValue = $this->attributeValue($subject, $bucketingKey);
         if (!is_scalar($bucketValue) || $bucketValue === '') {
             return false;
         }
@@ -266,14 +281,14 @@ final class FlagEvaluationService
         );
     }
 
-    private function attributeValue(array $client, string $attribute): mixed
+    private function attributeValue(array $subject, string $attribute): mixed
     {
         if ($attribute === '') {
             return null;
         }
 
         $segments = explode('.', $attribute);
-        $value = $client;
+        $value = $subject;
         foreach ($segments as $segment) {
             if (!is_array($value) || !array_key_exists($segment, $value)) {
                 return null;
