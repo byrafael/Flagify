@@ -496,7 +496,8 @@ paths:
       parameters:
         - name: environment
           in: query
-          schema: { type: string, description: Environment key, defaults to the project's default environment }
+          description: Environment key, defaults to the project's default environment
+          schema: { type: string }
       responses:
         '200':
           description: Resolved config
@@ -593,9 +594,17 @@ paths:
       responses:
         '200':
           description: Snapshot
+          headers:
+            ETag:
+              schema: { type: string }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RuntimeSnapshot' }
+        '304':
+          description: Snapshot unchanged
+          headers:
+            ETag:
+              schema: { type: string }
   /api/v1/projects/{projectId}/identities:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -625,20 +634,66 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
+        - name: kind
+          in: query
+          schema: { type: string }
+        - name: identifier
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, disabled, deleted] }
       responses:
-        '200': { description: Identity list }
+        '200':
+          description: Identity list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdentityListResponse' }
+  /api/v1/projects/{projectId}/identities/{identityId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/IdentityId'
+    get:
+      tags: [Identities]
+      summary: Get identity
+      responses:
+        '200':
+          description: Identity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Identity' }
+    patch:
+      tags: [Identities]
+      summary: Update identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateIdentityRequest' }
+      responses:
+        '200':
+          description: Updated identity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Identity' }
+    delete:
+      tags: [Identities]
+      summary: Delete identity
+      responses:
+        '204': { description: Identity deleted }
   /api/v1/projects/{projectId}/identities/{identityId}/traits:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
-      - name: identityId
-        in: path
-        required: true
-        schema: { type: string }
+      - $ref: '#/components/parameters/IdentityId'
     get:
       tags: [Identities]
       summary: List identity traits
       responses:
-        '200': { description: Trait map }
+        '200':
+          description: Trait map
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdentityTraitMapResponse' }
     patch:
       tags: [Identities]
       summary: Bulk set and unset traits
@@ -656,36 +711,278 @@ paths:
                   type: array
                   items: { type: string }
       responses:
-        '200': { description: Updated traits }
+        '200':
+          description: Updated traits
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdentityTraitMapResponse' }
+  /api/v1/projects/{projectId}/identities/{identityId}/traits/{traitKey}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/IdentityId'
+      - name: traitKey
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      tags: [Identities]
+      summary: Create or replace a single identity trait
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: {}
+      responses:
+        '200':
+          description: Updated trait
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdentityTraitUpsertResponse' }
   /api/v1/projects/{projectId}/audit-logs:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
     get:
       tags: [Audit]
       summary: List audit logs for project mutations
+      parameters:
+        - name: environment
+          in: query
+          schema: { type: string }
+        - name: resource_type
+          in: query
+          schema: { type: string }
+        - name: resource_id
+          in: query
+          schema: { type: string }
+        - name: resource_key
+          in: query
+          schema: { type: string }
+        - name: actor_id
+          in: query
+          schema: { type: string }
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: created_from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: created_to
+          in: query
+          schema: { type: string, format: date-time }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
-        '200': { description: Audit log list }
+        '200':
+          description: Audit log list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditLogListResponse' }
   /api/v1/projects/{projectId}/analytics/evaluations/by-flag:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
     get:
       tags: [Analytics]
       summary: Aggregate evaluations by flag
+      parameters:
+        - name: environment
+          in: query
+          schema: { type: string }
+        - name: flag_id
+          in: query
+          schema: { type: string }
+        - name: flag_key
+          in: query
+          schema: { type: string }
+        - name: created_from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: created_to
+          in: query
+          schema: { type: string, format: date-time }
+        - $ref: '#/components/parameters/Limit'
       responses:
-        '200': { description: Evaluation aggregates }
+        '200':
+          description: Evaluation aggregates
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsListResponse' }
+  /api/v1/projects/{projectId}/analytics/evaluations/by-variant:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Analytics]
+      summary: Aggregate evaluations by variant
+      parameters:
+        - name: environment
+          in: query
+          schema: { type: string }
+        - name: flag_id
+          in: query
+          schema: { type: string }
+        - name: flag_key
+          in: query
+          schema: { type: string }
+        - name: created_from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: created_to
+          in: query
+          schema: { type: string, format: date-time }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Evaluation aggregates by variant
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsListResponse' }
+  /api/v1/projects/{projectId}/analytics/evaluations/by-environment:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Analytics]
+      summary: Aggregate evaluations by environment
+      parameters:
+        - name: environment
+          in: query
+          schema: { type: string }
+        - name: flag_id
+          in: query
+          schema: { type: string }
+        - name: flag_key
+          in: query
+          schema: { type: string }
+        - name: created_from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: created_to
+          in: query
+          schema: { type: string, format: date-time }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Evaluation aggregates by environment
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsListResponse' }
+  /api/v1/projects/{projectId}/analytics/recent-activity:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Analytics]
+      summary: List recent evaluation activity
+      parameters:
+        - name: environment
+          in: query
+          schema: { type: string }
+        - name: flag_id
+          in: query
+          schema: { type: string }
+        - name: flag_key
+          in: query
+          schema: { type: string }
+        - name: created_from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: created_to
+          in: query
+          schema: { type: string, format: date-time }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Recent evaluation activity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsListResponse' }
   /api/v1/projects/{projectId}/change-requests:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
     post:
       tags: [Change Requests]
       summary: Create a change request for protected flag environment config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateChangeRequestRequest' }
       responses:
-        '201': { description: Change request created }
+        '201':
+          description: Change request created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangeRequest' }
     get:
       tags: [Change Requests]
       summary: List change requests
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
-        '200': { description: Change requests }
+        '200':
+          description: Change requests
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangeRequestListResponse' }
+  /api/v1/projects/{projectId}/change-requests/{changeRequestId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: changeRequestId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Change Requests]
+      summary: Get change request
+      responses:
+        '200':
+          description: Change request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangeRequest' }
+  /api/v1/projects/{projectId}/change-requests/{changeRequestId}/review:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: changeRequestId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Change Requests]
+      summary: Approve or reject a change request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [approve, reject] }
+      responses:
+        '200':
+          description: Reviewed change request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangeRequest' }
+  /api/v1/projects/{projectId}/change-requests/{changeRequestId}/apply:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: changeRequestId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Change Requests]
+      summary: Apply an approved change request
+      responses:
+        '200':
+          description: Applied change request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangeRequest' }
   /api/v1/projects/{projectId}/export:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -693,36 +990,100 @@ paths:
       tags: [Import Export]
       summary: Export deterministic project config
       responses:
-        '200': { description: Project export }
+        '200':
+          description: Project export
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectExport' }
   /api/v1/projects/{projectId}/import:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
     post:
       tags: [Import Export]
       summary: Import deterministic project config with dry-run and replace controls
+      parameters:
+        - name: dry_run
+          in: query
+          schema: { type: boolean, default: true }
+        - name: replace
+          in: query
+          schema: { type: boolean, default: false }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectImportRequest' }
       responses:
-        '200': { description: Import plan or apply result }
+        '200':
+          description: Import plan or apply result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectImportResponse' }
   /api/v1/projects/{projectId}/code-references:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
     post:
       tags: [Code References]
       summary: Ingest code references for flags
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCodeReferencesRequest' }
       responses:
-        '201': { description: Code references created }
+        '201':
+          description: Code references created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CodeReferenceListResponse' }
     get:
       tags: [Code References]
       summary: List code references
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
-        '200': { description: Code references }
+        '200':
+          description: Code references
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CodeReferenceListResponse' }
+  /api/v1/projects/{projectId}/code-references/{referenceId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: referenceId
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      tags: [Code References]
+      summary: Delete a code reference
+      responses:
+        '204': { description: Code reference deleted }
   /api/v1/projects/{projectId}/flags/stale-report:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
     get:
       tags: [Flags]
       summary: Report likely stale flags from evaluation history and code references
+      parameters:
+        - name: evaluated_before
+          in: query
+          schema: { type: string, format: date-time }
+        - name: stale_status
+          in: query
+          schema: { type: string, enum: [active, stale] }
+        - name: has_code_references
+          in: query
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
-        '200': { description: Stale flag candidates }
+        '200':
+          description: Stale flag candidates
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StaleFlagReportResponse' }
   /api/v1/runtime/projects/{projectId}/environments/{environmentKey}/identities/evaluate:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -730,16 +1091,100 @@ paths:
     post:
       tags: [Runtime]
       summary: Evaluate flags for an identity with transient traits
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EvaluateIdentityRequest' }
       responses:
-        '200': { description: Resolved identity config }
+        '200':
+          description: Resolved identity config
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResolvedConfig' }
+  /api/v1/runtime/projects/{projectId}/environments/{environmentKey}/identities/{kind}/{identifier}/config:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EnvironmentKey'
+      - name: kind
+        in: path
+        required: true
+        schema: { type: string }
+      - name: identifier
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Runtime]
+      summary: Resolve config for a specific identity in an environment
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                flag_keys:
+                  type: array
+                  items: { type: string }
+                transient_traits:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Resolved identity config
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResolvedConfig' }
+  /api/v1/runtime/projects/{projectId}/environments/{environmentKey}/identities/{kind}/{identifier}/config/{flagKey}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EnvironmentKey'
+      - name: kind
+        in: path
+        required: true
+        schema: { type: string }
+      - name: identifier
+        in: path
+        required: true
+        schema: { type: string }
+      - $ref: '#/components/parameters/FlagKey'
+    post:
+      tags: [Runtime]
+      summary: Resolve a single flag for a specific identity in an environment
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                transient_traits:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Resolved identity flag
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResolvedFlag' }
   /api/v1/runtime/projects/{projectId}/evaluation-events:batch:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
     post:
       tags: [Runtime]
       summary: Ingest batched evaluation events from local evaluators or edge services
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EvaluationEventBatchRequest' }
       responses:
-        '202': { description: Batch accepted }
+        '202':
+          description: Batch accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EvaluationEventBatchAccepted' }
 components:
   securitySchemes:
     bearerAuth:
@@ -779,6 +1224,11 @@ components:
       schema: { type: string }
     ClientKey:
       name: clientKey
+      in: path
+      required: true
+      schema: { type: string }
+    IdentityId:
+      name: identityId
       in: path
       required: true
       schema: { type: string }
@@ -822,7 +1272,7 @@ components:
         deleted_at: { type: [string, 'null'], format: date-time }
     Environment:
       type: object
-      required: [id, project_id, key, name, is_default, sort_order, status, created_at, updated_at]
+      required: [id, project_id, key, name, is_default, requires_change_requests, sort_order, status, created_at, updated_at]
       properties:
         id: { type: string }
         project_id: { type: string }
@@ -830,6 +1280,7 @@ components:
         name: { type: string }
         description: { type: [string, 'null'] }
         is_default: { type: integer }
+        requires_change_requests: { type: integer }
         sort_order: { type: integer }
         status: { type: string, enum: [active, deleted] }
         created_at: { type: string, format: date-time }
@@ -960,6 +1411,24 @@ components:
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         deleted_at: { type: [string, 'null'], format: date-time }
+    Identity:
+      type: object
+      required: [id, project_id, kind, identifier, status, traits, created_at, updated_at]
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        kind: { type: string }
+        identifier: { type: string }
+        display_name: { type: [string, 'null'] }
+        description: { type: [string, 'null'] }
+        status: { type: string, enum: [active, disabled, deleted] }
+        client_id: { type: [string, 'null'] }
+        traits:
+          type: object
+          additionalProperties: true
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        deleted_at: { type: [string, 'null'], format: date-time }
     Override:
       type: object
       required: [id, project_id, flag_id, client_id, value, created_at, updated_at]
@@ -1005,6 +1474,85 @@ components:
           type: object
           additionalProperties: true
         created_at: { type: string, format: date-time }
+    AuditLog:
+      type: object
+      required: [id, project_id, resource_type, resource_id, action, actor_type, metadata, created_at]
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        environment_id: { type: [string, 'null'] }
+        resource_type: { type: string }
+        resource_id: { type: string }
+        resource_key: { type: [string, 'null'] }
+        action: { type: string }
+        actor_type: { type: string }
+        actor_id: { type: [string, 'null'] }
+        actor_name: { type: [string, 'null'] }
+        request_id: { type: [string, 'null'] }
+        before_payload:
+          type: [object, 'null']
+          additionalProperties: true
+        after_payload:
+          type: [object, 'null']
+          additionalProperties: true
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at: { type: string, format: date-time }
+    AnalyticsItem:
+      type: object
+      additionalProperties: true
+    ChangeRequest:
+      type: object
+      required: [id, project_id, environment_id, resource_type, resource_id, status, title, proposed_payload, created_at, updated_at]
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        environment_id: { type: string }
+        resource_type: { type: string }
+        resource_id: { type: string }
+        status: { type: string, enum: [pending, approved, rejected, applied] }
+        title: { type: string }
+        description: { type: [string, 'null'] }
+        proposed_by_principal_id: { type: [string, 'null'] }
+        reviewed_by_principal_id: { type: [string, 'null'] }
+        applied_by_principal_id: { type: [string, 'null'] }
+        proposed_payload:
+          type: object
+          additionalProperties: true
+        approved_payload:
+          type: [object, 'null']
+          additionalProperties: true
+        base_snapshot_checksum: { type: [string, 'null'] }
+        applied_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CodeReference:
+      type: object
+      required: [id, project_id, flag_id, source_type, reference_path, observed_at, created_at, updated_at]
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        flag_id: { type: string }
+        source_type: { type: string }
+        source_name: { type: [string, 'null'] }
+        reference_path: { type: string }
+        reference_line: { type: [integer, 'null'] }
+        reference_context: { type: [string, 'null'] }
+        observed_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    StaleFlagCandidate:
+      type: object
+      required: [flag_id, flag_key, stale_status, code_reference_count]
+      properties:
+        flag_id: { type: string }
+        flag_key: { type: string }
+        stale_status: { type: string, enum: [active, stale] }
+        last_evaluated_at: { type: [string, 'null'], format: date-time }
+        code_reference_count: { type: integer }
+        latest_code_reference_observed_at: { type: [string, 'null'], format: date-time }
+        likely_stale_reason: { type: [string, 'null'] }
     ResolvedFlagValue:
       type: object
       required: [value, reason, stale_status]
@@ -1136,12 +1684,46 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Client' }
         meta: { $ref: '#/components/schemas/PaginationMeta' }
+    IdentityListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Identity' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
     OverrideListResponse:
       type: object
       properties:
         items:
           type: array
           items: { $ref: '#/components/schemas/Override' }
+    AuditLogListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AuditLog' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+    AnalyticsListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AnalyticsItem' }
+    ChangeRequestListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ChangeRequest' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+    CodeReferenceListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CodeReference' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
     KeyListResponse:
       type: object
       properties:
@@ -1156,6 +1738,91 @@ components:
           type: array
           items: { $ref: '#/components/schemas/EvaluationEvent' }
         meta: { $ref: '#/components/schemas/PaginationMeta' }
+    IdentityTraitMapResponse:
+      type: object
+      required: [identity_id, traits]
+      properties:
+        identity_id: { type: string }
+        traits:
+          type: object
+          additionalProperties: true
+    IdentityTraitUpsertResponse:
+      type: object
+      required: [identity_id, identity, trait]
+      properties:
+        identity_id: { type: string }
+        identity:
+          type: object
+          properties:
+            id: { type: string }
+            kind: { type: string }
+            identifier: { type: string }
+        trait:
+          type: object
+          additionalProperties: true
+    ProjectExport:
+      type: object
+      properties:
+        export_version: { type: string }
+        project: { $ref: '#/components/schemas/Project' }
+        environments:
+          type: array
+          items: { $ref: '#/components/schemas/Environment' }
+        flags:
+          type: array
+          items: { $ref: '#/components/schemas/Flag' }
+        segments:
+          type: array
+          items: { $ref: '#/components/schemas/Segment' }
+        flag_environment_configs:
+          type: array
+          items:
+            type: object
+            properties:
+              flag_key: { type: string }
+              environment_key: { type: string }
+              default_value: {}
+              default_variant_key: { type: [string, 'null'] }
+              rules:
+                type: array
+                items: { $ref: '#/components/schemas/TargetRule' }
+        prerequisites:
+          type: array
+          items:
+            type: object
+            properties:
+              flag_key: { type: string }
+              prerequisites:
+                type: array
+                items: { $ref: '#/components/schemas/Prerequisite' }
+        variants:
+          type: array
+          items:
+            type: object
+            properties:
+              flag_key: { type: string }
+              variants:
+                type: array
+                items: { $ref: '#/components/schemas/Variant' }
+    ProjectImportResponse:
+      type: object
+      properties:
+        dry_run: { type: boolean }
+        plan:
+          type: object
+          additionalProperties: true
+    StaleFlagReportResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/StaleFlagCandidate' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+    EvaluationEventBatchAccepted:
+      type: object
+      properties:
+        accepted: { type: integer }
+        batch_id: { type: [string, 'null'] }
     PaginationMeta:
       type: object
       properties:
@@ -1190,6 +1857,7 @@ components:
         name: { type: string }
         description: { type: [string, 'null'] }
         is_default: { type: boolean }
+        requires_change_requests: { type: boolean }
         sort_order: { type: integer }
     UpdateEnvironmentRequest:
       type: object
@@ -1198,6 +1866,7 @@ components:
         name: { type: string }
         description: { type: [string, 'null'] }
         is_default: { type: boolean }
+        requires_change_requests: { type: boolean }
         sort_order: { type: integer }
     CreateSegmentRequest:
       type: object
@@ -1287,11 +1956,78 @@ components:
         metadata:
           type: object
           additionalProperties: true
+    UpdateIdentityRequest:
+      type: object
+      properties:
+        kind: { type: string }
+        identifier: { type: string }
+        display_name: { type: [string, 'null'] }
+        description: { type: [string, 'null'] }
+        status: { type: string, enum: [active, disabled, deleted] }
     PutOverrideRequest:
       type: object
       required: [value]
       properties:
         value: {}
+    CreateChangeRequestRequest:
+      type: object
+      required: [flag_id, environment_key, title, desired_config]
+      properties:
+        flag_id: { type: string }
+        environment_key: { type: string }
+        title: { type: string }
+        description: { type: [string, 'null'] }
+        base_snapshot_checksum: { type: [string, 'null'] }
+        desired_config:
+          type: object
+          properties:
+            default_value: {}
+            default_variant_key: { type: [string, 'null'] }
+            rules:
+              type: array
+              items: { $ref: '#/components/schemas/TargetRule' }
+    ProjectImportRequest:
+      type: object
+      properties:
+        environments:
+          type: array
+          items: { $ref: '#/components/schemas/CreateEnvironmentRequest' }
+        segments:
+          type: array
+          items: { $ref: '#/components/schemas/CreateSegmentRequest' }
+        flags:
+          type: array
+          items: { $ref: '#/components/schemas/CreateFlagRequest' }
+        flag_environment_configs:
+          type: array
+          items:
+            type: object
+            properties:
+              flag_key: { type: string }
+              environment_key: { type: string }
+              default_value: {}
+              default_variant_key: { type: [string, 'null'] }
+              rules:
+                type: array
+                items: { $ref: '#/components/schemas/TargetRule' }
+    CreateCodeReferenceItem:
+      type: object
+      required: [flag_key, source_type, reference_path]
+      properties:
+        flag_key: { type: string }
+        source_type: { type: string }
+        source_name: { type: [string, 'null'] }
+        reference_path: { type: string }
+        reference_line: { type: [integer, 'null'] }
+        reference_context: { type: [string, 'null'] }
+        observed_at: { type: [string, 'null'], format: date-time }
+    CreateCodeReferencesRequest:
+      type: object
+      required: [references]
+      properties:
+        references:
+          type: array
+          items: { $ref: '#/components/schemas/CreateCodeReferenceItem' }
     CreateKeyRequest:
       type: object
       required: [kind, name]
@@ -1304,3 +2040,43 @@ components:
           type: array
           items: { type: string }
         expires_at: { type: [string, 'null'] }
+    EvaluateIdentityRequest:
+      type: object
+      required: [kind, identifier]
+      properties:
+        kind: { type: string }
+        identifier: { type: string }
+        flag_keys:
+          type: array
+          items: { type: string }
+        transient_traits:
+          type: object
+          additionalProperties: true
+    EvaluationEventBatchRequest:
+      type: object
+      required: [environment_key, events]
+      properties:
+        environment_key: { type: string }
+        batch_id: { type: [string, 'null'] }
+        snapshot_checksum: { type: [string, 'null'] }
+        events:
+          type: array
+          items:
+            type: object
+            required: [flag_key]
+            properties:
+              flag_key: { type: string }
+              client_key: { type: [string, 'null'] }
+              identity_kind: { type: [string, 'null'] }
+              identity_identifier: { type: [string, 'null'] }
+              variant_key: { type: [string, 'null'] }
+              value: {}
+              reason: { type: [string, 'null'] }
+              matched_rule: { type: [string, 'null'] }
+              traits:
+                type: [object, 'null']
+                additionalProperties: true
+              transient_traits:
+                type: [object, 'null']
+                additionalProperties: true
+              occurred_at: { type: [string, 'null'], format: date-time }
