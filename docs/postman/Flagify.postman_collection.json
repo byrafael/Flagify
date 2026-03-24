@@ -854,6 +854,24 @@
           }
         },
         {
+          "name": "Resolve Runtime Flag",
+          "request": {
+            "description": "Resolve one flag for the client bound to the runtime key.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{client_runtime_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/runtime/config/{{flag_key}}?environment=production",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "runtime", "config", "{{flag_key}}"],
+              "query": [
+                { "key": "environment", "value": "production" }
+              ]
+            }
+          }
+        },
+        {
           "name": "Resolve Project Client Config",
           "request": {
             "description": "Resolve config for any client in a specific environment using a project read or admin key. Useful for debugging targeting decisions.",
@@ -869,7 +887,74 @@
           }
         },
         {
+          "name": "Resolve Project Client Config With Query Environment",
+          "request": {
+            "description": "Resolve config for any project client using the environment query parameter.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/runtime/projects/{{project_id}}/clients/{{client_key}}/config?environment=production",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "runtime", "projects", "{{project_id}}", "clients", "{{client_key}}", "config"],
+              "query": [
+                { "key": "environment", "value": "production" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Resolve Project Client Flag",
+          "request": {
+            "description": "Resolve one flag for a project client in an explicit environment.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/runtime/projects/{{project_id}}/environments/production/clients/{{client_key}}/config/{{flag_key}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "runtime", "projects", "{{project_id}}", "environments", "production", "clients", "{{client_key}}", "config", "{{flag_key}}"]
+            }
+          }
+        },
+        {
+          "name": "Resolve Project Client Flag With Query Environment",
+          "request": {
+            "description": "Resolve one flag for a project client using the environment query parameter.",
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/runtime/projects/{{project_id}}/clients/{{client_key}}/config/{{flag_key}}?environment=production",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "runtime", "projects", "{{project_id}}", "clients", "{{client_key}}", "config", "{{flag_key}}"],
+              "query": [
+                { "key": "environment", "value": "production" }
+              ]
+            }
+          }
+        },
+        {
           "name": "Fetch Runtime Snapshot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.meta && data.meta.snapshot_checksum) pm.environment.set('snapshot_checksum', data.meta.snapshot_checksum);",
+                  "}",
+                  "const etag = pm.response.headers.get('ETag');",
+                  "if (etag) pm.environment.set('snapshot_checksum', etag.replace(/^\\\"|\\\"$/g, ''));"
+                ]
+              }
+            }
+          ],
           "request": {
             "description": "Download an environment snapshot containing flag definitions, segments, and rules. This is the contract intended for local evaluation consumers or future SDKs.",
             "method": "GET",
@@ -880,6 +965,26 @@
               "raw": "{{base_url}}/api/v1/runtime/projects/{{project_id}}/environments/production/snapshot",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "runtime", "projects", "{{project_id}}", "environments", "production", "snapshot"]
+            }
+          }
+        },
+        {
+          "name": "Batch Evaluation Events",
+          "request": {
+            "description": "Ingest batched evaluation events from local evaluators or edge services.",
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch_id\": \"batch-001\",\n  \"environment_key\": \"production\",\n  \"snapshot_checksum\": \"{{snapshot_checksum}}\",\n  \"events\": [\n    {\n      \"flag_key\": \"{{flag_key}}\",\n      \"client_key\": \"{{client_key}}\",\n      \"identity_kind\": \"{{identity_kind}}\",\n      \"identity_identifier\": \"{{identity_identifier}}\",\n      \"variant_key\": \"control\",\n      \"value\": \"control\",\n      \"reason\": \"batch_ingest\",\n      \"traits\": {\n        \"plan\": \"enterprise\"\n      },\n      \"occurred_at\": \"2026-03-23T12:00:00Z\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/runtime/projects/{{project_id}}/evaluation-events:batch",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "runtime", "projects", "{{project_id}}", "evaluation-events:batch"]
             }
           }
         }
