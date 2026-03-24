@@ -25,4 +25,27 @@ final class Json
             throw new ApiError('internal_error', 'Failed to encode JSON response', 500);
         }
     }
+
+    public static function canonicalize(mixed $value): mixed
+    {
+        if (!is_array($value)) {
+            return $value;
+        }
+
+        if (array_is_list($value)) {
+            return array_map(self::canonicalize(...), $value);
+        }
+
+        ksort($value);
+        foreach ($value as $key => $entry) {
+            $value[$key] = self::canonicalize($entry);
+        }
+
+        return $value;
+    }
+
+    public static function canonicalEncode(mixed $value): string
+    {
+        return self::encode(self::canonicalize($value));
+    }
 }

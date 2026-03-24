@@ -491,6 +491,89 @@
           }
         }
       ]
+    },
+    {
+      "name": "Identities",
+      "description": "Identity APIs create first-class runtime subjects and manage persisted traits independently from legacy clients.",
+      "item": [
+        {
+          "name": "Create Identity",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_admin_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"user\",\n  \"identifier\": \"user_123\",\n  \"display_name\": \"Primary User\",\n  \"traits\": {\n    \"plan\": \"pro\",\n    \"country\": \"us\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/identities",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "identities"]
+            }
+          }
+        },
+        {
+          "name": "Evaluate Identity",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"user\",\n  \"identifier\": \"user_123\",\n  \"transient_traits\": {\n    \"plan\": \"enterprise\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/runtime/projects/{{project_id}}/environments/production/identities/evaluate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "runtime", "projects", "{{project_id}}", "environments", "production", "identities", "evaluate"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Operations",
+      "description": "Operational APIs cover audit logs, analytics, change requests, import/export, code references, and stale-flag reporting.",
+      "item": [
+        {
+          "name": "List Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/audit-logs?limit=50&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "projects", "{{project_id}}", "audit-logs"],
+              "query": [
+                { "key": "limit", "value": "50" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Fetch Snapshot With ETag",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{project_read_key}}", "type": "text" },
+              { "key": "If-None-Match", "value": "\"{{snapshot_checksum}}\"", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/runtime/projects/{{project_id}}/environments/production/snapshot",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "runtime", "projects", "{{project_id}}", "environments", "production", "snapshot"]
+            }
+          }
+        }
+      ]
     }
   ]
 }

@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Flagify API
   version: 2.0.0
-  summary: Environment-aware feature flags, targeting rules, segments, variants, and runtime snapshots
+  summary: Environment-aware feature flags with identities, audit logs, analytics, protected changes, and versioned runtime snapshots
   description: |
     Flagify manages:
     - projects
@@ -12,6 +12,10 @@ info:
     - reusable targeting segments
     - per-environment flag rules
     - per-client overrides
+    - first-class identities and identity traits
+    - audit logs and evaluation analytics
+    - protected-environment change requests
+    - deterministic import/export and code reference ingestion
     - API keys
     - runtime resolution and local-evaluation snapshots
 servers:
@@ -24,7 +28,13 @@ tags:
   - name: Segments
   - name: Flags
   - name: Clients
+  - name: Identities
   - name: Overrides
+  - name: Audit
+  - name: Analytics
+  - name: Change Requests
+  - name: Import Export
+  - name: Code References
   - name: Events
   - name: Keys
   - name: Runtime
@@ -586,6 +596,150 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RuntimeSnapshot' }
+  /api/v1/projects/{projectId}/identities:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [Identities]
+      summary: Create an identity with optional initial traits
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, identifier]
+              properties:
+                kind: { type: string }
+                identifier: { type: string }
+                display_name: { type: [string, 'null'] }
+                description: { type: [string, 'null'] }
+                traits:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '201': { description: Identity created }
+    get:
+      tags: [Identities]
+      summary: List identities
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200': { description: Identity list }
+  /api/v1/projects/{projectId}/identities/{identityId}/traits:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: identityId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Identities]
+      summary: List identity traits
+      responses:
+        '200': { description: Trait map }
+    patch:
+      tags: [Identities]
+      summary: Bulk set and unset traits
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                set:
+                  type: object
+                  additionalProperties: true
+                unset:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200': { description: Updated traits }
+  /api/v1/projects/{projectId}/audit-logs:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Audit]
+      summary: List audit logs for project mutations
+      responses:
+        '200': { description: Audit log list }
+  /api/v1/projects/{projectId}/analytics/evaluations/by-flag:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Analytics]
+      summary: Aggregate evaluations by flag
+      responses:
+        '200': { description: Evaluation aggregates }
+  /api/v1/projects/{projectId}/change-requests:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [Change Requests]
+      summary: Create a change request for protected flag environment config
+      responses:
+        '201': { description: Change request created }
+    get:
+      tags: [Change Requests]
+      summary: List change requests
+      responses:
+        '200': { description: Change requests }
+  /api/v1/projects/{projectId}/export:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Import Export]
+      summary: Export deterministic project config
+      responses:
+        '200': { description: Project export }
+  /api/v1/projects/{projectId}/import:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [Import Export]
+      summary: Import deterministic project config with dry-run and replace controls
+      responses:
+        '200': { description: Import plan or apply result }
+  /api/v1/projects/{projectId}/code-references:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [Code References]
+      summary: Ingest code references for flags
+      responses:
+        '201': { description: Code references created }
+    get:
+      tags: [Code References]
+      summary: List code references
+      responses:
+        '200': { description: Code references }
+  /api/v1/projects/{projectId}/flags/stale-report:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Flags]
+      summary: Report likely stale flags from evaluation history and code references
+      responses:
+        '200': { description: Stale flag candidates }
+  /api/v1/runtime/projects/{projectId}/environments/{environmentKey}/identities/evaluate:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EnvironmentKey'
+    post:
+      tags: [Runtime]
+      summary: Evaluate flags for an identity with transient traits
+      responses:
+        '200': { description: Resolved identity config }
+  /api/v1/runtime/projects/{projectId}/evaluation-events:batch:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      tags: [Runtime]
+      summary: Ingest batched evaluation events from local evaluators or edge services
+      responses:
+        '202': { description: Batch accepted }
 components:
   securitySchemes:
     bearerAuth:
